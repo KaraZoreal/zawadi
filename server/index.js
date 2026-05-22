@@ -2191,14 +2191,16 @@ app.use((error, _req, res, _next) => {
   res.status(500).json({ error: "Something went wrong inside Zawadi" });
 });
 
-if (isProduction) {
+// Serve static files: production mode, or Vercel serverless
+if (isProduction || process.env.VERCEL === "1") {
   const distDir = path.join(rootDir, "dist");
   app.use(express.static(distDir));
+  // SPA fallback — return index.html for all non-API routes
   app.get("*", (_req, res) => {
     res.sendFile(path.join(distDir, "index.html"));
   });
-} else if (process.env.VERCEL !== "1") {
-  // Only use Vite dev server locally, not on Vercel
+} else {
+  // Local dev: use Vite dev server with HMR
   const { createServer } = await import("vite");
   const vite = await createServer({
     root: rootDir,
