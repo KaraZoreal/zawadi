@@ -5,6 +5,9 @@
 -- Extension for UUID generation
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
+-- Extension for trigram fuzzy text search — MUST be before trigram indexes
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+
 -- ============================================================================
 -- USERS TABLE
 -- ============================================================================
@@ -94,9 +97,6 @@ CREATE INDEX IF NOT EXISTS idx_scholarships_name_trgm
 
 CREATE INDEX IF NOT EXISTS idx_scholarships_field_trgm
   ON scholarships USING gin (field gin_trgm_ops);
-
--- Enable trigram extension for fuzzy text search (if not already enabled)
-CREATE EXTENSION IF NOT EXISTS pg_trgm;
 
 -- User scholarships: fast lookup
 CREATE INDEX IF NOT EXISTS idx_user_scholarships_user_id
@@ -212,3 +212,37 @@ CREATE POLICY user_scholarships_update_own ON user_scholarships
 CREATE POLICY user_scholarships_delete_own ON user_scholarships
   FOR DELETE
   USING (auth.uid() = user_id);
+
+-- ============================================================================
+-- STORAGE BUCKETS (for document uploads: CVs, transcripts, essays, etc.)
+-- ============================================================================
+
+-- Create the documents bucket
+INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+VALUES (
+  'documents',
+  'documents',
+  false,  -- NOT public — only authenticated users access their own files
+  10485760,  -- 10 MB max per file
+  ARRAY['application/pdf', 'image/jpeg', 'image/png', 'image/webp',
+        'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'text/plain']
+)
+ON CONFLICT (id) DO NOTHING;
+
+-- Storage RLS: Users can only access files in their own folder
+CREATE POLICY storage_select_own ON storage.objects
+  FOR SELECT
+  USING (auth.uid()::text = (storage.foldername(name))[1]);
+
+CREATE POLICY storage_insert_own ON storage.objects
+  FOR INSERT
+  WITH CHECK (auth.uid()::text = (storage.foldername(name))[1]);
+
+CREATE POLICY storage_update_own ON storage.objects
+  FOR UPDATE
+  USING (auth.uid()::text = (storage.foldername(name))[1]);
+
+CREATE POLICY storage_delete_own ON storage.objects
+  FOR DELETE
+  USING (auth.uid()::text = (storage.foldername(name))[1]);
