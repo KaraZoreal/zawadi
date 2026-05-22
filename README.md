@@ -11,13 +11,7 @@ npm run dev
 
 Open `http://localhost:5173`.
 
-**Demo account:**
-```
-Email: demo@zawadi.app
-Password: zawadi-demo
-```
-
-## 🧠 AI Features (New!)
+## 🧠 AI Features
 
 ### 1. Document Intelligence
 - **Auto-detects document types** regardless of naming conventions or country-specific formats
@@ -57,15 +51,15 @@ Copy `.env.example` to `.env` and add your DeepSeek API key:
 
 ```env
 AI_PROVIDER=deepseek
-AI_API_KEY=sk-your-deepseek-api-key
+AI_API_KEY=sk-you...-key
 AI_MODEL=deepseek-chat
 ```
 
-Get your key at https://platform.deepseek.com. Without it, the system runs in mock/demo mode with sample outputs.
+Get your key at https://platform.deepseek.com.
 
 ## 📋 What's Included
 
-- Supabase-ready authentication with local demo fallback
+- Supabase authentication
 - 54 African countries supported
 - Profile matching with study country, field, degree level filters
 - Premium scholarship finder with advanced filters

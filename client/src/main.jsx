@@ -31,7 +31,6 @@ import {
   Sparkles,
   Trash2,
   Upload,
-  UserRound,
   X
 } from "lucide-react";
 import "./styles.css";
@@ -282,8 +281,8 @@ function AuthScreen({ config, onAuthed, onBackToLanding }) {
   const [mode, setMode] = React.useState("login");
   const [form, setForm] = React.useState({
     name: "",
-    email: "demo@zawadi.app",
-    password: "zawadi-demo",
+    email: "",
+    password: "",
     country: "Kenya"
   });
   const [loading, setLoading] = React.useState(false);
@@ -295,8 +294,7 @@ function AuthScreen({ config, onAuthed, onBackToLanding }) {
     setError("");
 
     try {
-      const useLocalDemo = form.email.toLowerCase() === "demo@zawadi.app";
-      if (supabaseClient && !useLocalDemo) {
+      if (supabaseClient) {
         if (mode === "register") {
           const { data, error: signUpError } = await supabaseClient.auth.signUp({
             email: form.email,
@@ -421,26 +419,9 @@ function AuthScreen({ config, onAuthed, onBackToLanding }) {
             {loading ? <Loader2 className="spin" size={18} /> : <Check size={18} />}
             {mode === "login" ? "Sign in" : "Create account"}
           </button>
-          <button
-            className="ghost-btn full"
-            type="button"
-            onClick={() =>
-              setForm({
-                name: "",
-                email: "demo@zawadi.app",
-                password: "zawadi-demo",
-                country: "Kenya"
-              })
-            }
-          >
-            <UserRound size={17} />
-            Use demo account
-          </button>
         </form>
         <p className="microcopy">
-          {config?.supabase?.configured
-            ? "Supabase authentication is configured."
-            : "Local demo auth is active until Supabase keys are added."}
+          Supabase authentication is configured.
         </p>
       </section>
 
@@ -519,11 +500,6 @@ function Portal({
       method: "POST",
       body: JSON.stringify({ planId })
     });
-
-    if (result.demo || result.alreadyPaid) {
-      const me = await api("/api/me");
-      onUserChanged(me.user);
-    }
 
     return result;
   }
@@ -1494,12 +1470,6 @@ function PricingWorkspace({ config, user, onUserChanged, onToast }) {
         method: "POST",
         body: JSON.stringify({ planId, interval })
       });
-      if (data.demo) {
-        const me = await api("/api/me");
-        onUserChanged(me.user);
-        onToast(data.message);
-        return;
-      }
       window.location.href = data.authorizationUrl;
     } catch (err) {
       onToast(err.message);

@@ -472,14 +472,7 @@ async function initiatePayment(user, planId, email, amountKes) {
   const paystackKey = process.env.PAYSTACK_SECRET_KEY;
 
   if (!paystackKey) {
-    const plan = PLANS[planId] || PLANS.free;
-    return {
-      demo: true,
-      authorizationUrl: "",
-      reference,
-      plan,
-      message: "Paystack not configured. Upgraded in demo mode."
-    };
+    throw new Error("Payment processing is not configured. Please set PAYSTACK_SECRET_KEY.");
   }
 
   const body = {
@@ -513,15 +506,7 @@ async function initiatePayment(user, planId, email, amountKes) {
       plan: PLANS[planId]
     };
   } catch (error) {
-    // Fallback: demo mode upgrade
-    const plan = PLANS[planId] || PLANS.free;
-    return {
-      demo: true,
-      authorizationUrl: "",
-      reference,
-      plan,
-      message: `Paystack unavailable: ${error.message}. Upgraded in demo mode.`
-    };
+    throw error;
   }
 }
 

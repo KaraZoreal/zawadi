@@ -439,20 +439,7 @@ function defaultProfile(country = "Kenya") {
 async function createSeedDb() {
   const createdAt = nowIso();
   return {
-    users: [
-      {
-        id: "user-demo",
-        name: "Demo Scholar",
-        email: "demo@zawadi.app",
-        passwordHash: createPasswordHash("zawadi-demo"),
-        country: "Kenya",
-        plan: "plus",
-        planName: "Scholar Plus",
-        planStatus: "trial",
-        profile: defaultProfile("Kenya"),
-        createdAt
-      }
-    ],
+    users: [],
     sessions: [],
     scholarships: seedScholarships(),
     applications: [],
@@ -622,7 +609,7 @@ function cleanAccessibility(value) {
 }
 
 function normalizeUser(user) {
-  const plan = user.plan || (user.id === "user-demo" ? "plus" : "free");
+  const plan = user.plan || "free";
   const planData = pricingPlans.find((item) => item.id === plan) || pricingPlans[0];
   return {
     ...user,
@@ -1511,15 +1498,7 @@ app.post("/api/billing/checkout", requireAuth, async (req, res, next) => {
     ];
 
     if (!process.env.PAYSTACK_SECRET_KEY) {
-      // Demo mode: subscribe directly
-      const result = subscribe(req.db, req.user, planId, reference, amountKes, "KES");
-      await saveDb(req.db);
-      res.json({
-        demo: true,
-        authorizationUrl: "",
-        plan: PLANS[planId],
-        message: "Paystack secret key is not configured. Upgraded locally in demo mode."
-      });
+      res.status(503).json({ error: "Payment processing is not configured. Please try again later." });
       return;
     }
 
@@ -1638,17 +1617,6 @@ app.post("/api/payment/initiate", requireAuth, async (req, res, next) => {
     }
 
     const result = await initiatePayment(req.user, planId, req.user.email, amountKes);
-
-    if (result.demo) {
-      // Demo mode: apply upgrade directly
-      const plan = PLANS[planId] || upgradePlan;
-      req.user.plan = planId;
-      req.user.planName = plan?.name || planId;
-      req.user.is_paid = true;
-      req.user.paid_at = nowIso();
-      req.user.planStatus = "active";
-      await saveDb(req.db);
-    }
 
     res.json(result);
   } catch (error) {
