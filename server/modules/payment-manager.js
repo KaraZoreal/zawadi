@@ -21,8 +21,9 @@ const PLANS = {
     limits: {
       maxApplications: 10,
       maxDocuments: 3,
-      maxEssayGenerations: 0,     // No AI essays on free
-      maxAutoAppliesPerDay: 0,    // No auto-apply on free
+      maxEssayGenerations: 90,      // 3 per day x 30 days
+      maxEssayGenerationsPerDay: 3,  // Daily cap
+      maxAutoAppliesPerDay: 3,       // 3 scholarship applications per day on free tier
       premiumFilters: false,
       documentAnalysis: false,
       prioritySupport: false
@@ -32,6 +33,8 @@ const PLANS = {
       "Basic country, level and field filters",
       "10 tracked applications",
       "3 document records",
+      "3 AI essay generations per day",
+      "3 scholarship applications per day",
       "Weekly in-app updates"
     ]
   },
@@ -122,8 +125,7 @@ const SUBSCRIPTION_STATUS = {
   ACTIVE: "active",
   PAST_DUE: "past_due",
   CANCELED: "canceled",
-  EXPIRED: "expired",
-  DEMO: "demo"  // For local dev without Paystack
+  EXPIRED: "expired"
 };
 
 // --- Trial Management ---

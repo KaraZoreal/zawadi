@@ -2903,3 +2903,26 @@ td small {
     margin-bottom: 4px;
   }
 }
+
+/* ── Admin page ─────────────────────────────────────── */
+.admin-shell { display: flex; flex-direction: column; gap: 20px; }
+
+.source-list { display: flex; flex-direction: column; gap: 8px; padding: 8px 0; }
+.source-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 14px; background: var(--bg); border-radius: 10px;
+  border: 1px solid var(--line);
+}
+.source-row strong { font-size: 14px; color: var(--text); }
+
+.recent-list { display: flex; flex-direction: column; gap: 8px; padding: 8px 0; }
+.recent-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 14px; background: var(--bg); border-radius: 10px;
+  border: 1px solid var(--line); gap: 16px;
+}
+.recent-row strong { font-size: 14px; display: block; margin-bottom: 2px; }
+.recent-row span { font-size: 12px; color: var(--muted); }
+.recent-meta { display: flex; flex-direction: column; gap: 2px; text-align: right; white-space: nowrap; }
+.recent-meta small { font-size: 11px; color: var(--muted); }
+.empty-mini { padding: 24px; text-align: center; color: var(--muted); font-size: 13px; }

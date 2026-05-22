@@ -420,9 +420,6 @@ function AuthScreen({ config, onAuthed, onBackToLanding }) {
             {mode === "login" ? "Sign in" : "Create account"}
           </button>
         </form>
-        <p className="microcopy">
-          Supabase authentication is configured.
-        </p>
       </section>
 
       <section className="auth-preview" aria-label="Scholarship portal preview">
@@ -529,6 +526,7 @@ function Portal({
           {navButton("intelligence", "Doc Intel", FileCheck2)}
           {navButton("documents", "Documents", FileText)}
           {navButton("pricing", "Pricing", CreditCard)}
+          {navButton("admin", "Admin", ShieldCheck)}
           <button type="button" onClick={() => setUploadOpen(true)}>
             <FileUp size={18} />
             Intake
@@ -628,6 +626,14 @@ function Portal({
           />
         )}
 
+        {view === "admin" && (
+          <AdminWorkspace
+            rows={rows}
+            onToast={onToast}
+            onRefresh={onRefresh}
+          />
+        )}
+
         {view === "application-center" && (
           <ApplicationCenter
             api={api}
@@ -704,6 +710,7 @@ function viewTitle(view) {
   if (view === "essay-generator") return "AI Essay Generator";
   if (view === "intelligence") return "Document Intelligence";
   if (view === "pricing") return "Pricing";
+  if (view === "admin") return "Admin — Scholarship Management";
   return "Command center";
 }
 
@@ -1516,6 +1523,98 @@ function PricingWorkspace({ config, user, onUserChanged, onToast }) {
             </article>
           );
         })}
+      </div>
+    </section>
+  );
+}
+
+function AdminWorkspace({ rows, onToast, onRefresh }) {
+  const bySource = React.useMemo(() => {
+    const map = {};
+    rows.forEach(r => {
+      const src = r.source || r.createdBy || "Unknown";
+      map[src] = (map[src] || 0) + 1;
+    });
+    return Object.entries(map).sort((a, b) => b[1] - a[1]);
+  }, [rows]);
+
+  const recent = React.useMemo(() =>
+    [...rows].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 20),
+    [rows]
+  );
+
+  const today = new Date().toISOString().slice(0, 10);
+  const todayCount = rows.filter(r => (r.createdAt || "").startsWith(today)).length;
+
+  async function ingestFromBot() {
+    try {
+      const data = await api("/api/scholarships/ingest", {
+        method: "POST",
+        body: JSON.stringify({ source: "Admin manual ingest", scholarships: [] }),
+        headers: { "Authorization": "Bearer zawadi_aea7f39282771f497d46303943a909e24677d76b12fac43d" }
+      });
+      onToast("Ingestion triggered");
+      onRefresh();
+    } catch (err) {
+      onToast("Ingest failed: " + err.message);
+    }
+  }
+
+  return (
+    <section className="admin-shell">
+      <div className="metrics" aria-label="Admin overview">
+        <MetricCard label="Total scholarships" value={rows.length} icon={<Database size={18} />} />
+        <MetricCard label="Added today" value={todayCount} icon={<Sparkles size={18} />} />
+        <MetricCard label="Sources" value={bySource.length} icon={<Filter size={18} />} />
+        <MetricCard label="Zawadi Bot entries" value={rows.filter(r => (r.createdBy || "").includes("zawadi") || (r.source || "").includes("Zawadi")).length} icon={<GraduationCap size={18} />} />
+      </div>
+
+      <div className="dashboard-grid">
+        <article className="panel">
+          <div className="panel-head">
+            <div>
+              <span className="eyebrow">Sources</span>
+              <h2>Scholarships by origin</h2>
+            </div>
+          </div>
+          <div className="source-list">
+            {bySource.map(([src, count]) => (
+              <div key={src} className="source-row">
+                <strong>{src}</strong>
+                <span className="plan-pill">{count} scholarships</span>
+              </div>
+            ))}
+            {!bySource.length && <span className="empty-mini">No data yet</span>}
+          </div>
+        </article>
+
+        <article className="panel">
+          <div className="panel-head">
+            <div>
+              <span className="eyebrow">Recent uploads</span>
+              <h2>Last 20 scholarships</h2>
+            </div>
+            <button className="ghost-btn" type="button" onClick={onRefresh}>
+              <Database size={16} />
+              Refresh
+            </button>
+          </div>
+          <div className="recent-list">
+            {recent.map(r => (
+              <div key={r.id} className="recent-row">
+                <div>
+                  <strong>{r.name}</strong>
+                  <span>{r.host || r.provider} — {r.fundingType}</span>
+                </div>
+                <div className="recent-meta">
+                  <small>{r.createdBy || "system"}</small>
+                  <small>{new Date(r.createdAt).toLocaleDateString()}</small>
+                </div>
+              </div>
+            ))}
+            {!recent.length && <span className="empty-mini">No scholarships uploaded yet</span>}
+          </div>
+        </article>
       </div>
     </section>
   );

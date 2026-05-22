@@ -158,6 +158,8 @@ const pricingPlans = [
       "Basic country, level and field filters",
       "10 tracked applications",
       "3 document records",
+      "3 AI essay generations per day",
+      "3 scholarship applications per day",
       "Weekly in-app updates"
     ]
   },
@@ -1276,9 +1278,37 @@ app.post("/api/scholarships/bulk", requireAuth, async (req, res, next) => {
       return;
     }
 
-    const incoming = rows.slice(0, 150).map((row) =>
-      sanitizeScholarship({ ...row, source: row.source || req.body.source }, req.user.id)
+    // Dedup: collect existing (name, host) pairs
+    const existingPairs = new Set(
+      req.db.scholarships.map(s =>
+        `${s.name.toLowerCase().trim()}::${s.host.toLowerCase().trim()}`
+      )
     );
+
+    const incoming = [];
+    const skipped = [];
+    for (const row of rows.slice(0, 150)) {
+      const scholarship = sanitizeScholarship(
+        { ...row, source: row.source || req.body.source },
+        req.user.id
+      );
+      const pairKey = `${scholarship.name.toLowerCase().trim()}::${scholarship.host.toLowerCase().trim()}`;
+      if (existingPairs.has(pairKey)) {
+        skipped.push(scholarship.name);
+        continue;
+      }
+      existingPairs.add(pairKey);
+      incoming.push(scholarship);
+    }
+
+    if (!incoming.length) {
+      res.status(200).json({
+        scholarships: [],
+        skipped: skipped.length,
+        message: skipped.length ? `${skipped.length} duplicate(s) skipped` : "No new scholarships"
+      });
+      return;
+    }
 
     req.db.scholarships = [...incoming, ...req.db.scholarships];
     incoming.forEach((scholarship) => {
@@ -1295,7 +1325,9 @@ app.post("/api/scholarships/bulk", requireAuth, async (req, res, next) => {
     res.status(201).json({
       scholarships: incoming.map((row) =>
         scholarshipWithApplication(req.db, req.user, row)
-      )
+      ),
+      added: incoming.length,
+      skipped: skipped.length
     });
   } catch (error) {
     next(error);

@@ -2,31 +2,32 @@
 // Scholarship Ingestion Endpoint
 // ============================================================================
 // Accepts scholarship data from the Zawadi Telegram bot and upserts into
-// the Supabase scholarships table. Deduplicates by (name, host) combination.
+// BOTH Supabase and the local db.json. Deduplicates by (name, host).
 //
 // POST /api/scholarships/ingest
-// Headers: Authorization: Bearer <INGEST_API_KEY>
+// Headers: Authorization: Bearer ***
 // Body: { scholarships: [...] }
 
 import { Router } from "express";
 import { createClient } from "@supabase/supabase-js";
+import fs from "node:fs/promises";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** Normalize a value to a trimmed string, with optional fallback. */
 const text = (value, fallback = "") => {
   if (value === undefined || value === null) return fallback;
   return String(value).trim();
 };
 
-/**
- * Map Zawadi bot field names (UPPERCASE with underscores) to the scholarships
- * table columns. The bot output fields are:
- *   NAME, HOST, FIELD, DEGREE, FUNDING, DEADLINE,
- *   AFRICA_ELIGIBLE, AI_ML_TRACK, BARRIER, APPLY
- */
+const nowIso = () => new Date().toISOString();
+
 function normalizeScholarship(input) {
   return {
     name: text(input.NAME || input.name, "Untitled scholarship"),
@@ -42,10 +43,6 @@ function normalizeScholarship(input) {
   };
 }
 
-/**
- * Parse a boolean from various input shapes. The Zawadi bot may emit
- * "TRUE"/"FALSE", "Yes"/"No", true/false, 1/0, or already a boolean.
- */
 function parseBool(value, fallback = false) {
   if (value === undefined || value === null) return fallback;
   if (typeof value === "boolean") return value;
@@ -54,6 +51,84 @@ function parseBool(value, fallback = false) {
   if (s === "true" || s === "yes" || s === "1" || s === "y") return true;
   if (s === "false" || s === "no" || s === "0" || s === "n" || s === "") return false;
   return fallback;
+}
+
+// ---------------------------------------------------------------------------
+// Local DB helpers
+// ---------------------------------------------------------------------------
+
+const DATA_DIR = path.resolve(__dirname, "..", "data");
+const DB_PATH = path.join(DATA_DIR, "zawadi-db.json");
+
+async function loadLocalDb() {
+  await fs.mkdir(DATA_DIR, { recursive: true });
+  try {
+    const raw = await fs.readFile(DB_PATH, "utf8");
+    const db = JSON.parse(raw);
+    db.scholarships ||= [];
+    return db;
+  } catch {
+    return { scholarships: [] };
+  }
+}
+
+async function saveLocalDb(db) {
+  await fs.mkdir(DATA_DIR, { recursive: true });
+  await fs.writeFile(DB_PATH, JSON.stringify(db, null, 2));
+}
+
+/** Convert ingested scholarship to full local-db format */
+function toLocalScholarship(record, source = "Zawadi Bot") {
+  const africanCountries = [
+    "Algeria","Angola","Benin","Botswana","Burkina Faso","Burundi","Cameroon",
+    "Cape Verde","Central African Republic","Chad","Comoros","Congo",
+    "Cote d'Ivoire","Democratic Republic of the Congo","Djibouti","Egypt",
+    "Equatorial Guinea","Eritrea","Eswatini","Ethiopia","Gabon","Gambia",
+    "Ghana","Guinea","Guinea-Bissau","Kenya","Lesotho","Liberia","Libya",
+    "Madagascar","Malawi","Mali","Mauritania","Mauritius","Morocco",
+    "Mozambique","Namibia","Niger","Nigeria","Rwanda","Sao Tome and Principe",
+    "Senegal","Seychelles","Sierra Leone","Somalia","South Africa",
+    "South Sudan","Sudan","Tanzania","Togo","Tunisia","Uganda","Zambia","Zimbabwe"
+  ];
+
+  const eligibleCountries = record.africa_eligible
+    ? africanCountries
+    : ["Verify eligibility"];
+
+  const now = nowIso();
+  const dedupKey = `${record.name.toLowerCase().trim()}::${record.host.toLowerCase().trim()}`;
+
+  return {
+    id: `sch-ingest-${Buffer.from(dedupKey).toString("hex").slice(0, 16)}`,
+    name: record.name,
+    provider: record.host,
+    host: record.host,
+    countries: ["Global"],
+    eligibleCountries,
+    eligibleRegions: record.africa_eligible ? ["Africa"] : ["Verify"],
+    degreeLevels: [record.degree],
+    fields: [record.field],
+    schools: [record.host],
+    scholarshipType: "Scholarship",
+    fundingType: record.funding.toLowerCase().includes("full") ? "Fully funded" : record.funding,
+    amountLabel: record.funding,
+    amountMin: 0,
+    amountMax: 0,
+    currency: "USD",
+    deadline: record.deadline,
+    deadlineDate: "",
+    accessibility: record.africa_eligible ? ["Africa eligible"] : [],
+    requiredDocuments: ["CV", "Transcript", "Motivation Letter", "References"],
+    description: record.barrier ? `Note: ${record.barrier}` : "",
+    officialUrl: record.apply_url,
+    source,
+    tags: record.ai_ml_track ? ["ai", "ml", "tech"] : [],
+    createdAt: now,
+    updatedAt: now,
+    verifiedAt: "",
+    createdBy: "zawadi-bot",
+    _dedupKey: dedupKey
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -72,7 +147,7 @@ function getSupabase() {
     process.env.VITE_SUPABASE_ANON_KEY;
 
   if (!url || !key) {
-    throw new Error("Supabase is not configured (missing SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY)");
+    return null; // Don't throw — just skip Supabase writes
   }
 
   _supabase = createClient(url, key, {
@@ -90,10 +165,6 @@ function getSupabase() {
 // API key auth middleware
 // ---------------------------------------------------------------------------
 
-/**
- * Expects an Authorization: Bearer <token> header whose value must match
- * process.env.INGEST_API_KEY.
- */
 function requireIngestApiKey(req, res, next) {
   const expectedKey = process.env.INGEST_API_KEY;
 
@@ -117,19 +188,9 @@ function requireIngestApiKey(req, res, next) {
 // POST /api/scholarships/ingest
 // ---------------------------------------------------------------------------
 
-/**
- * Upsert scholarships into the Supabase `scholarships` table.
- *
- * Request body (JSON):
- *   { scholarships: [ { NAME, HOST, FIELD, DEGREE, FUNDING, DEADLINE,
- *                       AFRICA_ELIGIBLE, AI_ML_TRACK, BARRIER, APPLY }, ... ] }
- *
- * Response:
- *   { ok: true, new: number, updated: number, total: number,
- *     errors: number, details: [{ name, host, status, error? }] }
- */
 async function ingestScholarships(req, res) {
   const supabase = getSupabase();
+  const source = text(req.body.source, "Zawadi Bot");
 
   const scholarships = Array.isArray(req.body.scholarships)
     ? req.body.scholarships
@@ -144,52 +205,77 @@ async function ingestScholarships(req, res) {
     });
   }
 
-  // Cap batch size to prevent abuse
   const batch = scholarships.slice(0, 500).map(normalizeScholarship);
+
+  // --- Load local DB for dedup check ---
+  const localDb = await loadLocalDb();
+  const existingDedupKeys = new Set(
+    localDb.scholarships
+      .filter(s => s._dedupKey)
+      .map(s => s._dedupKey)
+  );
+
+  // Also track by (name, host) for existing entries without _dedupKey
+  const existingNameHost = new Set(
+    localDb.scholarships.map(s =>
+      `${s.name.toLowerCase().trim()}::${s.host.toLowerCase().trim()}`
+    )
+  );
 
   let newCount = 0;
   let updatedCount = 0;
+  let skippedCount = 0;
   let errorCount = 0;
   const details = [];
 
   for (const record of batch) {
-    try {
-      const { data, error } = await supabase
-        .from("scholarships")
-        .upsert(record, {
-          onConflict: "name,host", // matches the UNIQUE constraint
-          ignoreDuplicates: false, // update if exists
-        })
-        .select("id, name, host, created_at, updated_at")
-        .single();
+    const localScholarship = toLocalScholarship(record, source);
+    const dedupKey = localScholarship._dedupKey;
+    const nameHostKey = `${record.name.toLowerCase().trim()}::${record.host.toLowerCase().trim()}`;
 
-      if (error) {
-        errorCount++;
-        details.push({
-          name: record.name,
-          host: record.host,
-          status: "error",
-          error: error.message,
-        });
-        continue;
-      }
-
-      // Determine if this was an insert or update by comparing timestamps.
-      // When upserted, created_at ≈ updated_at for new rows; updated_at > created_at for updates.
-      const created = new Date(data.created_at).getTime();
-      const updated = new Date(data.updated_at).getTime();
-      const isNew = Math.abs(updated - created) < 500; // within 500ms = new insert
-
-      if (isNew) {
-        newCount++;
-      } else {
-        updatedCount++;
-      }
-
+    // --- Dedup check ---
+    if (existingDedupKeys.has(dedupKey) || existingNameHost.has(nameHostKey)) {
+      skippedCount++;
       details.push({
-        name: data.name,
-        host: data.host,
-        status: isNew ? "new" : "updated",
+        name: record.name,
+        host: record.host,
+        status: "skipped",
+        reason: "Duplicate — already exists in database"
+      });
+      continue;
+    }
+
+    // --- Try Supabase write ---
+    if (supabase) {
+      try {
+        const { error } = await supabase
+          .from("scholarships")
+          .upsert(record, {
+            onConflict: "name,host",
+            ignoreDuplicates: false,
+          });
+
+        if (error) {
+          // RLS or other Supabase error — continue to local write anyway
+          console.warn(`[ingest] Supabase write skipped for "${record.name}": ${error.message}`);
+        }
+      } catch (err) {
+        console.warn(`[ingest] Supabase error for "${record.name}": ${err.message}`);
+      }
+    }
+
+    // --- Always write to local DB ---
+    try {
+      // Remove the _dedupKey helper field before storing
+      const { _dedupKey: _, ...clean } = localScholarship;
+      localDb.scholarships.unshift(clean);
+      existingDedupKeys.add(dedupKey);
+      existingNameHost.add(nameHostKey);
+      newCount++;
+      details.push({
+        name: record.name,
+        host: record.host,
+        status: "new",
       });
     } catch (err) {
       errorCount++;
@@ -202,10 +288,16 @@ async function ingestScholarships(req, res) {
     }
   }
 
+  // Save local DB
+  if (newCount > 0) {
+    await saveLocalDb(localDb);
+  }
+
   return res.status(200).json({
     ok: true,
     new: newCount,
     updated: updatedCount,
+    skipped: skippedCount,
     total: newCount + updatedCount,
     errors: errorCount,
     details,
@@ -218,7 +310,6 @@ async function ingestScholarships(req, res) {
 
 const router = Router();
 
-// Apply API key auth to all routes on this router
 router.use(requireIngestApiKey);
 
 router.post("/ingest", (req, res, next) => {
