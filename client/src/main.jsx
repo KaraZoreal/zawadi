@@ -110,6 +110,7 @@ function App() {
   const [booting, setBooting] = React.useState(true);
   const [config, setConfig] = React.useState(null);
   const [user, setUser] = React.useState(null);
+  const [isAdmin, setIsAdmin] = React.useState(false);
   const [rows, setRows] = React.useState([]);
   const [documents, setDocuments] = React.useState([]);
   const [stats, setStats] = React.useState(emptyStats());
@@ -157,6 +158,12 @@ function App() {
       setBooting(false);
     }
   }
+
+  // Check admin status whenever user changes
+  React.useEffect(() => {
+    if (!user) { setIsAdmin(false); return; }
+    api("/api/admin/check").then(d => setIsAdmin(d.isAdmin)).catch(() => setIsAdmin(false));
+  }, [user]);
 
   async function loadScholarships() {
     const data = await api("/api/scholarships");
@@ -230,6 +237,7 @@ function App() {
       <Portal
         config={config}
         user={user}
+        isAdmin={isAdmin}
         rows={rows}
         documents={documents}
         stats={stats}
@@ -294,6 +302,15 @@ function AuthScreen({ config, onAuthed, onBackToLanding }) {
     setError("");
 
     try {
+      // Admin login path
+      if (mode === "admin") {
+        const data = await api("/api/admin/login", {
+          method: "POST",
+          body: JSON.stringify({ email: form.email, password: form.password })
+        });
+        onAuthed(data.user);
+        return;
+      }
       if (supabaseClient) {
         if (mode === "register") {
           const { data, error: signUpError } = await supabaseClient.auth.signUp({
@@ -364,6 +381,13 @@ function AuthScreen({ config, onAuthed, onBackToLanding }) {
           >
             Create account
           </button>
+          <button
+            type="button"
+            className={mode === "admin" ? "active" : ""}
+            onClick={() => setMode("admin")}
+          >
+            Admin
+          </button>
         </div>
 
         <form className="auth-form" onSubmit={submit}>
@@ -417,7 +441,7 @@ function AuthScreen({ config, onAuthed, onBackToLanding }) {
           {error && <div className="form-error">{error}</div>}
           <button className="primary-btn full" type="submit" disabled={loading}>
             {loading ? <Loader2 className="spin" size={18} /> : <Check size={18} />}
-            {mode === "login" ? "Sign in" : "Create account"}
+            {mode === "login" ? "Sign in" : mode === "admin" ? "Admin sign in" : "Create account"}
           </button>
         </form>
       </section>
@@ -461,6 +485,7 @@ function BrandBlock() {
 function Portal({
   config,
   user,
+  isAdmin,
   rows,
   documents,
   stats,
@@ -526,7 +551,7 @@ function Portal({
           {navButton("intelligence", "Doc Intel", FileCheck2)}
           {navButton("documents", "Documents", FileText)}
           {navButton("pricing", "Pricing", CreditCard)}
-          {navButton("admin", "Admin", ShieldCheck)}
+          {isAdmin && navButton("admin", "Admin", ShieldCheck)}
           <button type="button" onClick={() => setUploadOpen(true)}>
             <FileUp size={18} />
             Intake
@@ -1529,6 +1554,37 @@ function PricingWorkspace({ config, user, onUserChanged, onToast }) {
 }
 
 function AdminWorkspace({ rows, onToast, onRefresh }) {
+  const [adminData, setAdminData] = React.useState(null);
+  const [loadingUsers, setLoadingUsers] = React.useState(false);
+
+  React.useEffect(() => { loadAdminData(); }, []);
+
+  async function loadAdminData() {
+    setLoadingUsers(true);
+    try {
+      const data = await api("/api/admin/users");
+      setAdminData(data);
+    } catch (err) {
+      onToast("Failed to load admin data: " + err.message);
+    } finally {
+      setLoadingUsers(false);
+    }
+  }
+
+  async function updateUserPlan(userId, planId) {
+    try {
+      await api(`/api/admin/users/${userId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ plan: planId, is_paid: planId !== "free" })
+      });
+      onToast("User plan updated");
+      loadAdminData();
+      onRefresh();
+    } catch (err) {
+      onToast("Failed: " + err.message);
+    }
+  }
+
   const bySource = React.useMemo(() => {
     const map = {};
     rows.forEach(r => {
@@ -1545,29 +1601,75 @@ function AdminWorkspace({ rows, onToast, onRefresh }) {
 
   const today = new Date().toISOString().slice(0, 10);
   const todayCount = rows.filter(r => (r.createdAt || "").startsWith(today)).length;
-
-  async function ingestFromBot() {
-    try {
-      const data = await api("/api/scholarships/ingest", {
-        method: "POST",
-        body: JSON.stringify({ source: "Admin manual ingest", scholarships: [] }),
-        headers: { "Authorization": "Bearer zawadi_aea7f39282771f497d46303943a909e24677d76b12fac43d" }
-      });
-      onToast("Ingestion triggered");
-      onRefresh();
-    } catch (err) {
-      onToast("Ingest failed: " + err.message);
-    }
-  }
+  const users = adminData?.users || [];
+  const plans = adminData?.plans || [];
+  const adminStats = adminData?.stats || {};
 
   return (
     <section className="admin-shell">
       <div className="metrics" aria-label="Admin overview">
         <MetricCard label="Total scholarships" value={rows.length} icon={<Database size={18} />} />
         <MetricCard label="Added today" value={todayCount} icon={<Sparkles size={18} />} />
-        <MetricCard label="Sources" value={bySource.length} icon={<Filter size={18} />} />
-        <MetricCard label="Zawadi Bot entries" value={rows.filter(r => (r.createdBy || "").includes("zawadi") || (r.source || "").includes("Zawadi")).length} icon={<GraduationCap size={18} />} />
+        <MetricCard label="Total users" value={users.length} icon={<GraduationCap size={18} />} />
+        <MetricCard label="Zawadi Bot entries" value={rows.filter(r => (r.createdBy || "").includes("zawadi") || (r.source || "").includes("Zawadi")).length} icon={<Sparkles size={18} />} />
       </div>
+
+      {/* ── User Management ── */}
+      <article className="panel">
+        <div className="panel-head">
+          <div>
+            <span className="eyebrow">User management</span>
+            <h2>All registered users ({users.length})</h2>
+          </div>
+          <button className="ghost-btn" type="button" onClick={loadAdminData} disabled={loadingUsers}>
+            {loadingUsers ? <Loader2 className="spin" size={16} /> : <Database size={16} />}
+            Refresh
+          </button>
+        </div>
+        <div className="sheet-shell" style={{maxHeight: 400, overflow: "auto"}}>
+          <table className="sheet-table portal-table">
+            <thead>
+              <tr>
+                <th>User</th>
+                <th>Email</th>
+                <th>Country</th>
+                <th>Plan</th>
+                <th>Paid</th>
+                <th>Apps</th>
+                <th>Docs</th>
+                <th>Joined</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {users.map(u => (
+                <tr key={u.id}>
+                  <td><strong>{u.name}</strong>{u.role === "admin" && <span className="plan-pill" style={{marginLeft: 8}}>Admin</span>}</td>
+                  <td><small>{u.email}</small></td>
+                  <td>{u.country}</td>
+                  <td><span className="plan-pill">{u.planName}</span></td>
+                  <td>{u.is_paid ? "✅" : "❌"}</td>
+                  <td>{u.applicationsCount}</td>
+                  <td>{u.documentsCount}</td>
+                  <td><small>{new Date(u.createdAt).toLocaleDateString()}</small></td>
+                  <td>
+                    <select
+                      className="cell-select compact"
+                      value={u.plan}
+                      onChange={e => updateUserPlan(u.id, e.target.value)}
+                    >
+                      {plans.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                    </select>
+                  </td>
+                </tr>
+              ))}
+              {!users.length && !loadingUsers && (
+                <tr><td colSpan={9} style={{textAlign:"center",padding:20,color:"var(--muted)"}}>No users registered yet</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </article>
 
       <div className="dashboard-grid">
         <article className="panel">

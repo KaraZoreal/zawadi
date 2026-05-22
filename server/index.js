@@ -2297,6 +2297,129 @@ app.get("/api/scholarships/filtered", requireAuth, (req, res) => {
   });
 });
 
+// ============================================================
+// Admin Authentication & User Management
+// ============================================================
+
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL || "admin@zawadi.app";
+const ADMIN_PASSWORD_HASH = process.env.ADMIN_PASSWORD_HASH || createPasswordHash("zawadi-admin-2026");
+const adminSessionCookie = "zawadi_admin_session";
+
+function isAdmin(req) {
+  return req.user?.role === "admin";
+}
+
+function requireAdmin(req, res, next) {
+  if (!isAdmin(req)) {
+    res.status(403).json({ error: "Admin access required" });
+    return;
+  }
+  next();
+}
+
+// Admin login
+app.post("/api/admin/login", async (req, res, next) => {
+  try {
+    const email = text(req.body.email).toLowerCase();
+    const password = text(req.body.password);
+
+    if (email !== ADMIN_EMAIL || !verifyPassword(password, ADMIN_PASSWORD_HASH)) {
+      res.status(401).json({ error: "Invalid admin credentials" });
+      return;
+    }
+
+    // Set admin session — reuse the same session mechanism with admin role
+    const db = await loadDb();
+    let adminUser = db.users.find(u => u.role === "admin");
+    if (!adminUser) {
+      adminUser = normalizeUser({
+        id: "admin-001",
+        name: "Administrator",
+        email: ADMIN_EMAIL,
+        country: "Kenya",
+        plan: "mentor",
+        planName: "Mentor Review",
+        planStatus: "active",
+        role: "admin",
+        is_paid: true,
+        createdAt: nowIso()
+      });
+      db.users.push(adminUser);
+      await saveDb(db);
+    }
+
+    await createSessionForUser(db, adminUser.id, res);
+    res.json({ user: serializeUser(adminUser) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Get all users (admin only)
+app.get("/api/admin/users", requireAuth, requireAdmin, (req, res) => {
+  const users = req.db.users.map(u => ({
+    id: u.id,
+    name: u.name,
+    email: u.email,
+    country: u.country,
+    plan: u.plan,
+    planName: u.planName,
+    planStatus: u.planStatus,
+    is_paid: Boolean(u.is_paid),
+    role: u.role || "user",
+    createdAt: u.createdAt,
+    applicationsCount: req.db.applications.filter(a => a.userId === u.id).length,
+    documentsCount: req.db.documents.filter(d => d.userId === u.id).length
+  }));
+
+  res.json({
+    users,
+    total: users.length,
+    plans: Object.values(PLANS).map(p => ({ id: p.id, name: p.name })),
+    stats: {
+      totalScholarships: req.db.scholarships.length,
+      totalApplications: req.db.applications.length,
+      totalDocuments: req.db.documents.length
+    }
+  });
+});
+
+// Update user plan (admin only)
+app.patch("/api/admin/users/:id", requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    const user = req.db.users.find(u => u.id === req.params.id);
+    if (!user) {
+      res.status(404).json({ error: "User not found" });
+      return;
+    }
+
+    if (req.body.plan !== undefined) {
+      const plan = PLANS[req.body.plan];
+      if (!plan) {
+        res.status(400).json({ error: "Invalid plan" });
+        return;
+      }
+      user.plan = req.body.plan;
+      user.planName = plan.name;
+      user.is_paid = req.body.is_paid !== undefined ? Boolean(req.body.is_paid) : user.is_paid;
+    }
+
+    if (req.body.planStatus !== undefined) {
+      user.planStatus = req.body.planStatus;
+    }
+
+    await saveDb(req.db);
+    res.json({ ok: true, user: serializeUser(normalizeUser(user)) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Admin check — returns admin status
+app.get("/api/admin/check", requireAuth, (req, res) => {
+  res.json({ isAdmin: isAdmin(req) });
+});
+
 app.use((error, _req, res, _next) => {
   console.error(error);
   res.status(500).json({ error: "Something went wrong inside Zawadi" });
