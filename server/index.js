@@ -22,7 +22,9 @@ import {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const rootDir = path.resolve(__dirname, "..");
-const dataDir = path.join(__dirname, "data");
+const dataDir = process.env.VERCEL
+  ? "/tmp"
+  : path.join(__dirname, "data");
 const dbPath = path.join(dataDir, "zawadi-db.json");
 const sessionCookie = "zawadi_session";
 const sessionMs = 1000 * 60 * 60 * 24 * 30;
@@ -2195,7 +2197,8 @@ if (isProduction) {
   app.get("*", (_req, res) => {
     res.sendFile(path.join(distDir, "index.html"));
   });
-} else {
+} else if (process.env.VERCEL !== "1") {
+  // Only use Vite dev server locally, not on Vercel
   const { createServer } = await import("vite");
   const vite = await createServer({
     root: rootDir,
@@ -2205,6 +2208,12 @@ if (isProduction) {
   app.use(vite.middlewares);
 }
 
-app.listen(port, () => {
-  console.log(`Zawadi is running at http://localhost:${port}`);
-});
+// Only listen when run directly (not imported by Vercel)
+const isMainModule = process.argv[1]?.includes("server/index.js") || process.argv[1]?.includes("server\\index.js");
+if (isMainModule) {
+  app.listen(port, () => {
+    console.log(`Zawadi is running at http://localhost:${port}`);
+  });
+}
+
+export default app;
