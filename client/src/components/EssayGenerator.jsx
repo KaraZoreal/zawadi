@@ -5,7 +5,7 @@ import React from "react";
 import {
   Sparkles, FileText, Loader2, Check, AlertTriangle, Upload,
   BookOpen, ChevronRight, RefreshCw, Eye, Download, Copy, X,
-  Pencil, Brain, Star, CheckCircle2
+  Pencil, Brain, Star, CheckCircle2, Lock
 } from "lucide-react";
 
 const ESSAY_TYPE_LABELS = {
@@ -17,7 +17,7 @@ const ESSAY_TYPE_LABELS = {
   study_plan: "Study Plan"
 };
 
-export default function EssayGenerator({ api, scholarships = [], onToast }) {
+export default function EssayGenerator({ api, scholarships = [], user, onToast, onUpgrade }) {
   const [essayTypes, setEssayTypes] = React.useState(null);
   const [selectedType, setSelectedType] = React.useState("personal_statement");
   const [selectedScholarship, setSelectedScholarship] = React.useState("");
@@ -32,6 +32,8 @@ export default function EssayGenerator({ api, scholarships = [], onToast }) {
   const [uploadingSample, setUploadingSample] = React.useState(false);
   const [sampleText, setSampleText] = React.useState("");
   const [sampleTitle, setSampleTitle] = React.useState("");
+  const [generationCount, setGenerationCount] = React.useState(0);
+  const [usageLoading, setUsageLoading] = React.useState(true);
 
   // Edit & learning state
   const [editedEssay, setEditedEssay] = React.useState("");
@@ -42,12 +44,29 @@ export default function EssayGenerator({ api, scholarships = [], onToast }) {
   const [editSaved, setEditSaved] = React.useState(false);
   const [preferences, setPreferences] = React.useState(null);
 
-  // Load essay types and samples on mount
+  const isFree = user?.plan === "free" && !user?.is_paid;
+  const essayLimit = 1;
+  const limitReached = isFree && generationCount >= essayLimit;
+
+  // Load essay types, samples, and usage on mount
   React.useEffect(() => {
     loadEssayTypes();
     loadSamples();
     loadPreferences();
+    loadUsage();
   }, []);
+
+  async function loadUsage() {
+    setUsageLoading(true);
+    try {
+      const data = await api("/api/billing/usage");
+      setGenerationCount(data.monthly?.essayGenerations || 0);
+    } catch {
+      setGenerationCount(0);
+    } finally {
+      setUsageLoading(false);
+    }
+  }
 
   async function loadEssayTypes() {
     try {
@@ -134,6 +153,11 @@ export default function EssayGenerator({ api, scholarships = [], onToast }) {
       return;
     }
 
+    if (limitReached) {
+      onUpgrade?.();
+      return;
+    }
+
     setGenerating(true);
     setError("");
     setResult(null);
@@ -151,6 +175,7 @@ export default function EssayGenerator({ api, scholarships = [], onToast }) {
       });
 
       setResult(data);
+      setGenerationCount((prev) => prev + 1);
       setActiveStage(null);
       onToast("Essay generated successfully ✓");
     } catch (err) {
@@ -185,6 +210,20 @@ export default function EssayGenerator({ api, scholarships = [], onToast }) {
         Upload writing samples you've authored before. The AI learns your voice, then generates
         a personalized essay through three refinement stages — no two users get the same essay.
       </p>
+
+      {/* Free tier limit banner */}
+      {isFree && (
+        <div className="free-tier-banner">
+          <Lock size={16} />
+          <span>
+            Free plan: {generationCount}/{essayLimit} essay generated this month.{" "}
+          </span>
+          <button className="ghost-btn" onClick={onUpgrade}>
+            Upgrade for unlimited essays
+            <ChevronRight size={14} />
+          </button>
+        </div>
+      )}
 
       {/* Samples Section */}
       <section className="essay-section">
@@ -279,17 +318,27 @@ export default function EssayGenerator({ api, scholarships = [], onToast }) {
       </section>
 
       {/* Generate Button */}
-      <button
-        className="primary-btn full"
-        onClick={generate}
-        disabled={generating || samples.length < 1}
-      >
-        {generating ? (
-          <><Loader2 className="spin" size={18} /> Generating Essay...</>
-        ) : (
-          <><Sparkles size={18} /> Generate Personalized Essay</>
-        )}
-      </button>
+      {limitReached ? (
+        <button
+          className="primary-btn full upgrade-btn"
+          onClick={onUpgrade}
+        >
+          <Lock size={18} />
+          Upgrade to generate more essays
+        </button>
+      ) : (
+        <button
+          className="primary-btn full"
+          onClick={generate}
+          disabled={generating || samples.length < 1}
+        >
+          {generating ? (
+            <><Loader2 className="spin" size={18} /> Generating Essay...</>
+          ) : (
+            <><Sparkles size={18} /> Generate Personalized Essay</>
+          )}
+        </button>
+      )}
 
       {samples.length < 1 && (
         <div className="form-error">Upload at least 1 writing sample above before generating.</div>

@@ -465,8 +465,177 @@ function getBillingSummary(db, userId) {
   };
 }
 
+// --- Paystack API Integration ---
+
+async function initiatePayment(user, planId, email, amountKes) {
+  const reference = `zawadi-${planId}-${Date.now()}-${crypto.randomBytes(4).toString("hex")}`;
+  const paystackKey = process.env.PAYSTACK_SECRET_KEY;
+
+  if (!paystackKey) {
+    const plan = PLANS[planId] || PLANS.free;
+    return {
+      demo: true,
+      authorizationUrl: "",
+      reference,
+      plan,
+      message: "Paystack not configured. Upgraded in demo mode."
+    };
+  }
+
+  const body = {
+    email,
+    amount: String(amountKes * 100), // Paystack uses kobo/cents
+    currency: "KES",
+    reference,
+    callback_url: process.env.PAYSTACK_CALLBACK_URL || "",
+    metadata: {
+      userId: user.id,
+      planId
+    }
+  };
+
+  try {
+    const response = await fetch("https://api.paystack.co/transaction/initialize", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${paystackKey}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(body)
+    });
+    const payload = await response.json();
+    if (!response.ok || !payload.status) {
+      throw new Error(payload.message || "Paystack initialization failed");
+    }
+    return {
+      authorizationUrl: payload.data.authorization_url,
+      reference: payload.data.reference,
+      plan: PLANS[planId]
+    };
+  } catch (error) {
+    // Fallback: demo mode upgrade
+    const plan = PLANS[planId] || PLANS.free;
+    return {
+      demo: true,
+      authorizationUrl: "",
+      reference,
+      plan,
+      message: `Paystack unavailable: ${error.message}. Upgraded in demo mode.`
+    };
+  }
+}
+
+function verifyWebhookSignature(payload, signature, secret) {
+  const expected = crypto.createHmac("sha512", secret).update(payload).digest("hex");
+  return signature === expected;
+}
+
+function processWebhookEvent(event, db) {
+  if (event.event === "charge.success") {
+    const metadata = event.data?.metadata || {};
+    const userId = metadata.userId;
+    const planId = metadata.planId;
+
+    if (!userId || !planId) return { success: false, reason: "Missing userId or planId in metadata" };
+
+    const user = db.users.find((u) => u.id === userId);
+    if (!user) return { success: false, reason: "User not found" };
+
+    const plan = PLANS[planId];
+    const planName = plan ? plan.name : planId;
+
+    user.plan = planId;
+    user.planName = planName;
+    user.is_paid = true;
+    user.paid_at = nowIso();
+    user.planStatus = SUBSCRIPTION_STATUS.ACTIVE;
+    user.subscriptionReference = event.data.reference;
+
+    db.payments.push({
+      id: crypto.randomUUID(),
+      userId,
+      planId,
+      reference: event.data.reference,
+      amount: (event.data.amount || 0) / 100,
+      currency: event.data.currency || "KES",
+      status: "success",
+      type: "subscription",
+      createdAt: nowIso()
+    });
+
+    return { success: true, userId, planId, planName };
+  }
+
+  return { success: false, reason: `Unhandled event: ${event.event}` };
+}
+
+async function verifyPayment(reference) {
+  const paystackKey = process.env.PAYSTACK_SECRET_KEY;
+  if (!paystackKey) {
+    return { status: false, message: "Paystack not configured" };
+  }
+
+  try {
+    const response = await fetch(`https://api.paystack.co/transaction/verify/${reference}`, {
+      headers: {
+        Authorization: `Bearer ${paystackKey}`
+      }
+    });
+    const payload = await response.json();
+
+    return {
+      status: payload.status,
+      message: payload.message,
+      data: payload.data ? {
+        reference: payload.data.reference,
+        amount: payload.data.amount / 100,
+        currency: payload.data.currency,
+        status: payload.data.status,
+        paidAt: payload.data.paid_at,
+        metadata: payload.data.metadata
+      } : null
+    };
+  } catch (error) {
+    return { status: false, message: error.message };
+  }
+}
+
+// --- Pricing Plans for Upgrade Modal (KES one-time payment model) ---
+
+const UPGRADE_PLANS = {
+  season_pass: {
+    id: "season_pass",
+    name: "Season Pass",
+    priceKes: 2600,  // ~$20
+    badge: "Recommended",
+    description: "Full access for one application season. Essays, unlimited tracking, all templates.",
+    features: [
+      "Unlimited AI essay generations",
+      "Unlimited application tracking",
+      "All document templates",
+      "Premium filters and match scoring",
+      "Priority application alerts"
+    ]
+  },
+  premium: {
+    id: "premium",
+    name: "Premium",
+    priceKes: 6500,  // ~$50
+    badge: "Best Value",
+    description: "Everything in Season Pass plus mentoring features and priority support.",
+    features: [
+      "Everything in Season Pass",
+      "Priority document review queue",
+      "Interview preparation tools",
+      "Mentor feedback on essays",
+      "Priority email & chat support"
+    ]
+  }
+};
+
 export {
   PLANS,
+  UPGRADE_PLANS,
   SUBSCRIPTION_STATUS,
   TRIAL_DAYS,
   isTrialActive,
@@ -482,5 +651,9 @@ export {
   changePlan,
   getPaymentHistory,
   generateInvoice,
-  getBillingSummary
+  getBillingSummary,
+  initiatePayment,
+  verifyPayment,
+  verifyWebhookSignature,
+  processWebhookEvent
 };

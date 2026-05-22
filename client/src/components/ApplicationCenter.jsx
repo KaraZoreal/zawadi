@@ -4,10 +4,10 @@
 import React from "react";
 import {
   Zap, FileWarning, CheckCircle2, AlertTriangle, Clock,
-  Loader2, ChevronRight, Eye, X, Send, Copy, FileText
+  Loader2, ChevronRight, Eye, X, Send, Copy, FileText, Lock
 } from "lucide-react";
 
-export default function ApplicationCenter({ api, rows = [], onToast, onRefresh }) {
+export default function ApplicationCenter({ api, rows = [], user, onToast, onRefresh, onUpgrade }) {
   const [applying, setApplying] = React.useState(false);
   const [batchApplying, setBatchApplying] = React.useState(false);
   const [selectedIds, setSelectedIds] = React.useState([]);
@@ -15,6 +15,11 @@ export default function ApplicationCenter({ api, rows = [], onToast, onRefresh }
   const [alerts, setAlerts] = React.useState([]);
   const [activeResult, setActiveResult] = React.useState(null);
   const [loading, setLoading] = React.useState(false);
+
+  const isFree = user?.plan === "free" && !user?.is_paid;
+  const trackingLimit = 3;
+  const trackedCount = rows.filter((r) => r.application?.status && r.application.status !== "Not started").length;
+  const limitReached = isFree && trackedCount >= trackingLimit;
 
   React.useEffect(() => {
     loadAlerts();
@@ -28,6 +33,10 @@ export default function ApplicationCenter({ api, rows = [], onToast, onRefresh }
   }
 
   async function applySingle(scholarshipId) {
+    if (limitReached) {
+      onUpgrade?.();
+      return;
+    }
     setApplying(true);
     try {
       const data = await api(`/api/apply/${scholarshipId}`, { method: "POST" });
@@ -97,6 +106,20 @@ export default function ApplicationCenter({ api, rows = [], onToast, onRefresh }
         When something is missing, the application is saved as a draft with specific alerts.
       </p>
 
+      {/* Free tier limit banner */}
+      {isFree && (
+        <div className="free-tier-banner">
+          <Lock size={16} />
+          <span>
+            Free plan: {trackedCount}/{trackingLimit} applications tracked.{" "}
+          </span>
+          <button className="ghost-btn" onClick={onUpgrade}>
+            Upgrade for unlimited tracking
+            <ChevronRight size={14} />
+          </button>
+        </div>
+      )}
+
       {/* Stats Bar */}
       <div className="app-stats-bar">
         <div className="app-stat">
@@ -149,14 +172,21 @@ export default function ApplicationCenter({ api, rows = [], onToast, onRefresh }
         <div className="panel-head">
           <h3>Scholarships</h3>
           <div className="apply-actions">
-            <button
-              className="secondary-btn"
-              onClick={applyBatch}
-              disabled={batchApplying || selectedIds.length === 0}
-            >
-              {batchApplying ? <Loader2 className="spin" size={16} /> : <Zap size={16} />}
-              Auto-Apply ({selectedIds.length})
-            </button>
+            {limitReached ? (
+              <button className="primary-btn" onClick={onUpgrade}>
+                <Lock size={16} />
+                Upgrade to track more
+              </button>
+            ) : (
+              <button
+                className="secondary-btn"
+                onClick={applyBatch}
+                disabled={batchApplying || selectedIds.length === 0}
+              >
+                {batchApplying ? <Loader2 className="spin" size={16} /> : <Zap size={16} />}
+                Auto-Apply ({selectedIds.length})
+              </button>
+            )}
           </div>
         </div>
 
@@ -186,14 +216,21 @@ export default function ApplicationCenter({ api, rows = [], onToast, onRefresh }
                 </div>
 
                 <div className="apply-actions">
-                  <button
-                    className="secondary-btn"
-                    onClick={() => applySingle(row.id)}
-                    disabled={applying}
-                  >
-                    {applying ? <Loader2 size={14} className="spin" /> : <Zap size={14} />}
-                    Auto-Apply
-                  </button>
+                  {limitReached ? (
+                    <button className="secondary-btn" onClick={onUpgrade}>
+                      <Lock size={14} />
+                      Upgrade
+                    </button>
+                  ) : (
+                    <button
+                      className="secondary-btn"
+                      onClick={() => applySingle(row.id)}
+                      disabled={applying}
+                    >
+                      {applying ? <Loader2 size={14} className="spin" /> : <Zap size={14} />}
+                      Auto-Apply
+                    </button>
+                  )}
                 </div>
               </div>
             );

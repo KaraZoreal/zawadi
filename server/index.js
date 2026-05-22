@@ -14,10 +14,12 @@ import { generateEssay, ESSAY_TYPES } from "./modules/essay-generator.js";
 import { recordEvent, analyzeLearningData, generateRecommendations, EVENT_TYPES } from "./modules/learning-system.js";
 import { recordEdit, getUserPreferences, buildPreferenceGuidance, getEditHistorySummary } from "./modules/essay-learner.js";
 import {
-  PLANS, SUBSCRIPTION_STATUS, isTrialActive, trialsDaysLeft, startTrial, endTrial,
+  PLANS, UPGRADE_PLANS, SUBSCRIPTION_STATUS, isTrialActive, trialsDaysLeft, startTrial, endTrial,
   getUserUsage, trackUsage, checkLimitWithUsage,
-  subscribe, cancelSubscription, changePlan, getPaymentHistory, generateInvoice, getBillingSummary
+  subscribe, cancelSubscription, changePlan, getPaymentHistory, generateInvoice, getBillingSummary,
+  initiatePayment, verifyPayment, verifyWebhookSignature, processWebhookEvent
 } from "./modules/payment-manager.js";
+import scholarshipIngestionRouter from "./modules/scholarship-ingestion.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -55,50 +57,24 @@ app.post(
   express.raw({ type: "application/json" }),
   async (req, res, next) => {
     try {
-      const secret = process.env.PAYSTACK_SECRET_KEY;
+      const secret = process.env.PAYSTACK_WEBHOOK_SECRET || process.env.PAYSTACK_SECRET_KEY;
       if (!secret) {
         res.status(204).send();
         return;
       }
 
-      const signature = req.headers["x-paystack-signature"];
-      const expected = crypto
-        .createHmac("sha512", secret)
-        .update(req.body)
-        .digest("hex");
-
-      if (signature !== expected) {
+      const signature = req.headers["x-paystack-signature"] || "";
+      if (!verifyWebhookSignature(req.body, signature, secret)) {
         res.status(401).json({ error: "Invalid Paystack signature" });
         return;
       }
 
       const event = JSON.parse(req.body.toString("utf8"));
-      if (event.event === "charge.success") {
-        const metadata = event.data?.metadata || {};
-        const userId = metadata.userId;
-        const planId = metadata.planId;
-        if (userId && planId) {
-          const db = await loadDb();
-          const user = db.users.find((item) => item.id === userId);
-          const plan = pricingPlans.find((item) => item.id === planId);
-          if (user && plan) {
-            user.plan = plan.id;
-            user.planName = plan.name;
-            user.planStatus = "active";
-            user.subscriptionReference = event.data.reference;
-            db.payments.push({
-              id: crypto.randomUUID(),
-              userId,
-              planId,
-              reference: event.data.reference,
-              amount: event.data.amount,
-              currency: event.data.currency,
-              status: "success",
-              createdAt: nowIso()
-            });
-            await saveDb(db);
-          }
-        }
+      const db = await loadDb();
+      const result = processWebhookEvent(event, db);
+
+      if (result.success) {
+        await saveDb(db);
       }
 
       res.status(200).json({ ok: true });
@@ -654,6 +630,8 @@ function normalizeUser(user) {
     plan,
     planName: user.planName || planData.name,
     planStatus: user.planStatus || (plan === "free" ? "free" : "active"),
+    is_paid: Boolean(user.is_paid),
+    paid_at: user.paid_at || null,
     profile: {
       ...defaultProfile(user.country || user.profile?.country || "Kenya"),
       ...(user.profile || {})
@@ -887,6 +865,8 @@ function serializeUser(user) {
     plan: user.plan,
     planName: user.planName,
     planStatus: user.planStatus,
+    is_paid: Boolean(user.is_paid),
+    paid_at: user.paid_at || null,
     profile: user.profile,
     createdAt: user.createdAt
   };
@@ -978,7 +958,7 @@ async function requireAuth(req, res, next) {
 app.get("/api/health", (_req, res) => {
   res.json({
     ok: true,
-    name: "Zawadi",
+    name: "Techsari — Zawadi",
     supabaseConfigured: Boolean(supabase),
     paystackConfigured: Boolean(process.env.PAYSTACK_SECRET_KEY)
   });
@@ -1263,6 +1243,10 @@ app.patch("/api/profile", requireAuth, async (req, res, next) => {
     next(error);
   }
 });
+
+// --- Scholarship Ingestion (Zawadi Bot) ---
+// Mounted before other /api/scholarships routes to avoid conflicts
+app.use("/api/scholarships", scholarshipIngestionRouter);
 
 app.get("/api/scholarships", requireAuth, (req, res) => {
   const rows = req.db.scholarships
@@ -1623,6 +1607,133 @@ app.get("/api/billing/usage", requireAuth, (req, res) => {
     limits: plan.limits,
     plan: plan.name
   });
+});
+
+// ============================================================
+// Paystack Payment Integration — New Routes
+// ============================================================
+
+// POST /api/payment/initiate — Create Paystack payment link (KES amounts, userId in metadata)
+app.post("/api/payment/initiate", requireAuth, async (req, res, next) => {
+  try {
+    const planId = text(req.body.planId, "season_pass");
+    const upgradePlan = UPGRADE_PLANS[planId];
+    const legacyPlan = PLANS[planId];
+
+    if (!upgradePlan && !legacyPlan) {
+      res.status(400).json({ error: "Invalid plan. Choose season_pass or premium." });
+      return;
+    }
+
+    const amountKes = upgradePlan ? upgradePlan.priceKes : legacyPlan.monthlyKes;
+
+    // If user already on this plan and is_paid, no need to repay
+    if (req.user.plan === planId && req.user.is_paid) {
+      res.json({
+        alreadyPaid: true,
+        plan: upgradePlan || legacyPlan,
+        message: "You already have access to this plan."
+      });
+      return;
+    }
+
+    const result = await initiatePayment(req.user, planId, req.user.email, amountKes);
+
+    if (result.demo) {
+      // Demo mode: apply upgrade directly
+      const plan = PLANS[planId] || upgradePlan;
+      req.user.plan = planId;
+      req.user.planName = plan?.name || planId;
+      req.user.is_paid = true;
+      req.user.paid_at = nowIso();
+      req.user.planStatus = "active";
+      await saveDb(req.db);
+    }
+
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// GET /api/payment/verify/:reference — Check payment status
+app.get("/api/payment/verify/:reference", requireAuth, async (req, res, next) => {
+  try {
+    const result = await verifyPayment(req.params.reference);
+
+    // If payment was successful and user not yet marked, mark them
+    if (result.status && result.data?.status === "success" && result.data?.metadata?.userId === req.user.id) {
+      const metadata = result.data.metadata;
+      if (!req.user.is_paid) {
+        req.user.plan = metadata.planId || req.user.plan;
+        req.user.planName = PLANS[metadata.planId]?.name || metadata.planId;
+        req.user.is_paid = true;
+        req.user.paid_at = result.data.paidAt || nowIso();
+        req.user.planStatus = "active";
+        await saveDb(req.db);
+      }
+    }
+
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// POST /api/webhook/paystack — Verify signature, update user plan on charge.success
+app.post(
+  "/api/webhook/paystack",
+  express.raw({ type: "application/json" }),
+  async (req, res, next) => {
+    try {
+      const secret = process.env.PAYSTACK_WEBHOOK_SECRET || process.env.PAYSTACK_SECRET_KEY;
+      if (!secret) {
+        res.status(204).send();
+        return;
+      }
+
+      const signature = req.headers["x-paystack-signature"] || "";
+
+      if (!verifyWebhookSignature(req.body, signature, secret)) {
+        res.status(401).json({ error: "Invalid Paystack signature" });
+        return;
+      }
+
+      const event = JSON.parse(req.body.toString("utf8"));
+      const db = await loadDb();
+      const result = processWebhookEvent(event, db);
+
+      if (result.success) {
+        await saveDb(db);
+      }
+
+      res.status(200).json({ ok: true, ...result });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// --- Upgrade Plans Endpoint (for UpgradeModal) ---
+app.get("/api/payment/plans", (_req, res) => {
+  const plans = [
+    {
+      id: "free",
+      name: "Explorer",
+      priceKes: 0,
+      badge: "Free",
+      description: "Scholarship discovery and basic application tracking.",
+      features: [
+        "Open scholarship database",
+        "Basic country, level and field filters",
+        "1 AI essay generation",
+        "Track up to 3 applications",
+        "Weekly in-app updates"
+      ]
+    },
+    ...Object.values(UPGRADE_PLANS)
+  ];
+  res.json({ plans });
 });
 
 // ============================================================

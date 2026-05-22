@@ -36,10 +36,12 @@ import {
 } from "lucide-react";
 import "./styles.css";
 
-// --- Zawadi AI Components ---
+// --- Techsari Zawadi AI Components ---
 import EssayGenerator from "./components/EssayGenerator.jsx";
 import ApplicationCenter from "./components/ApplicationCenter.jsx";
 import IntelligencePanel from "./components/IntelligencePanel.jsx";
+import UpgradeModal from "./components/UpgradeModal.jsx";
+import LandingPage from "./components/LandingPage.jsx";
 
 let supabaseClient = null;
 
@@ -102,7 +104,7 @@ function configureSupabase(config) {
 }
 
 function isPaid(user) {
-  return user?.plan && user.plan !== "free";
+  return user?.is_paid || (user?.plan && user.plan !== "free");
 }
 
 function App() {
@@ -113,6 +115,7 @@ function App() {
   const [documents, setDocuments] = React.useState([]);
   const [stats, setStats] = React.useState(emptyStats());
   const [toast, setToast] = React.useState("");
+  const [showLanding, setShowLanding] = React.useState(true);
 
   React.useEffect(() => {
     bootstrap();
@@ -203,6 +206,14 @@ function App() {
   if (booting) return <BootScreen />;
 
   if (!user) {
+    if (showLanding) {
+      return (
+        <LandingPage
+          onGetStarted={() => setShowLanding(false)}
+          onLogin={() => setShowLanding(false)}
+        />
+      );
+    }
     return (
       <AuthScreen
         config={config}
@@ -210,6 +221,7 @@ function App() {
           setUser(nextUser);
           await loadScholarships();
         }}
+        onBackToLanding={() => setShowLanding(true)}
       />
     );
   }
@@ -261,12 +273,12 @@ function BootScreen() {
   return (
     <main className="boot-screen">
       <Loader2 className="spin" size={32} />
-      <span>Zawadi</span>
+      <span>Techsari &mdash; Zawadi</span>
     </main>
   );
 }
 
-function AuthScreen({ config, onAuthed }) {
+function AuthScreen({ config, onAuthed, onBackToLanding }) {
   const [mode, setMode] = React.useState("login");
   const [form, setForm] = React.useState({
     name: "",
@@ -461,7 +473,7 @@ function BrandBlock() {
         <GraduationCap size={24} />
       </div>
       <div>
-        <strong>Zawadi</strong>
+        <strong>Techsari &mdash; Zawadi</strong>
         <span>Scholarship Portal</span>
       </div>
     </div>
@@ -485,6 +497,36 @@ function Portal({
   const [view, setView] = React.useState("dashboard");
   const [uploadOpen, setUploadOpen] = React.useState(false);
   const [editing, setEditing] = React.useState(null);
+  const [upgradeOpen, setUpgradeOpen] = React.useState(false);
+  const [upgradePlans, setUpgradePlans] = React.useState([]);
+
+  // Load upgrade plans on mount
+  React.useEffect(() => {
+    loadUpgradePlans();
+  }, []);
+
+  async function loadUpgradePlans() {
+    try {
+      const data = await api("/api/payment/plans");
+      setUpgradePlans(data.plans || []);
+    } catch {
+      setUpgradePlans([]);
+    }
+  }
+
+  async function handleUpgrade(planId) {
+    const result = await api("/api/payment/initiate", {
+      method: "POST",
+      body: JSON.stringify({ planId })
+    });
+
+    if (result.demo || result.alreadyPaid) {
+      const me = await api("/api/me");
+      onUserChanged(me.user);
+    }
+
+    return result;
+  }
 
   function navButton(id, label, Icon) {
     return (
@@ -597,6 +639,7 @@ function Portal({
             rows={rows}
             onDocumentsChanged={onDocumentsChanged}
             onToast={onToast}
+            onUpgrade={() => setUpgradeOpen(true)}
           />
         )}
 
@@ -613,8 +656,10 @@ function Portal({
           <ApplicationCenter
             api={api}
             rows={rows}
+            user={user}
             onToast={onToast}
             onRefresh={onRefresh}
+            onUpgrade={() => setUpgradeOpen(true)}
           />
         )}
 
@@ -622,7 +667,9 @@ function Portal({
           <EssayGenerator
             api={api}
             scholarships={rows}
+            user={user}
             onToast={onToast}
+            onUpgrade={() => setUpgradeOpen(true)}
           />
         )}
 
@@ -660,6 +707,16 @@ function Portal({
           }}
         />
       )}
+
+      {upgradeOpen && (
+        <UpgradeModal
+          plans={upgradePlans}
+          user={user}
+          onClose={() => setUpgradeOpen(false)}
+          onUpgrade={handleUpgrade}
+          onToast={onToast}
+        />
+      )}
     </main>
   );
 }
@@ -688,7 +745,7 @@ function NotificationButton({ onToast }) {
     setPermission(result);
     if (result === "granted") {
       onToast("Scholarship notifications enabled");
-      notifyUser("Zawadi notifications enabled", "New scholarship matches can now alert you.");
+      notifyUser("Techsari \u2014 Zawadi notifications enabled", "New scholarship matches can now alert you.");
     }
   }
 
@@ -1292,13 +1349,20 @@ function MatchCard({ row, compact = false }) {
   );
 }
 
-function DocumentsWorkspace({ user, documents, rows, onDocumentsChanged, onToast }) {
+function DocumentsWorkspace({ user, documents, rows, onDocumentsChanged, onToast, onUpgrade }) {
   const [type, setType] = React.useState("CV");
   const needed = [...new Set(rows.slice(0, 6).flatMap((row) => row.match.missingDocuments))];
+  const isFree = user?.plan === "free" && !user?.is_paid;
+  const canUpload = !isFree || documents.length < 3;
 
   async function handleFile(event) {
     const file = event.target.files?.[0];
     if (!file) return;
+
+    if (isFree && documents.length >= 3) {
+      onUpgrade?.();
+      return;
+    }
 
     let storagePath = "";
     let source = "Local metadata";
@@ -1346,13 +1410,26 @@ function DocumentsWorkspace({ user, documents, rows, onDocumentsChanged, onToast
 
   return (
     <section className="dashboard-grid documents-grid">
+      {isFree && (
+        <div className="free-tier-banner">
+          <Lock size={16} />
+          <span>Free plan: limited to 3 documents. </span>
+          <button className="ghost-btn" onClick={onUpgrade}>
+            Upgrade to unlock unlimited documents
+            <ChevronRight size={14} />
+          </button>
+        </div>
+      )}
       <article className="panel">
         <div className="panel-head">
           <div>
             <span className="eyebrow">Vault</span>
             <h2>Application documents</h2>
           </div>
-          <span className="plan-pill">{documents.length} files</span>
+          <span className="plan-pill">
+            {documents.length} files
+            {isFree && ` / 3 free`}
+          </span>
         </div>
         <div className="document-upload-row">
           <label>
@@ -1361,11 +1438,18 @@ function DocumentsWorkspace({ user, documents, rows, onDocumentsChanged, onToast
               {documentTypes.map((option) => <option key={option}>{option}</option>)}
             </select>
           </label>
-          <label className="file-drop compact-drop">
-            <FileUp size={22} />
-            <span>Upload resume, transcript or certificate</span>
-            <input type="file" onChange={handleFile} />
-          </label>
+          {canUpload ? (
+            <label className="file-drop compact-drop">
+              <FileUp size={22} />
+              <span>Upload resume, transcript or certificate</span>
+              <input type="file" onChange={handleFile} />
+            </label>
+          ) : (
+            <button className="secondary-btn" onClick={onUpgrade}>
+              <Lock size={18} />
+              Upgrade to upload more documents
+            </button>
+          )}
         </div>
         <div className="document-list">
           {documents.map((doc) => (
@@ -1503,7 +1587,7 @@ function UploadModal({ onClose, onImported }) {
       const data = await api("/api/scholarships/bulk", {
         method: "POST",
         body: JSON.stringify({
-          source: "Zawadi agent or CSV upload",
+          source: "Techsari Zawadi agent or CSV upload",
           scholarships: preview
         })
       });
@@ -1519,7 +1603,7 @@ function UploadModal({ onClose, onImported }) {
     <Modal title="Upload scholarships" onClose={onClose}>
       <label className="file-drop">
         <FileUp size={22} />
-        <span>CSV, JSON or Zawadi agent text</span>
+        <span>CSV, JSON or Techsari Zawadi agent text</span>
         <input type="file" accept=".csv,.json,.txt" onChange={handleFile} />
       </label>
       <textarea
