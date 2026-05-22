@@ -1,0 +1,21 @@
+{
+  "name": "zawadi-scholarship-manager",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node server/index.js",
+    "build": "vite build",
+    "start": "node server/index.js --production"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.106.1",
+    "@vitejs/plugin-react": "^5.1.1",
+    "dotenv": "^17.4.2",
+    "express": "^4.19.2",
+    "lucide-react": "^0.475.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "vite": "^6.1.0"
+  }
+}
