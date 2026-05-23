@@ -106,6 +106,10 @@ function isPaid(user) {
   return user?.is_paid || (user?.plan && user.plan !== "free");
 }
 
+function planRank(planId = "free") {
+  return { free: 0, plus: 1, pro: 2, mentor: 3 }[planId] ?? 0;
+}
+
 function App() {
   const [booting, setBooting] = React.useState(true);
   const [config, setConfig] = React.useState(null);
@@ -1675,6 +1679,7 @@ function PricingWorkspace({ config, user, onUserChanged, onToast }) {
         {plans.map((plan) => {
           const price = planDisplayPrice(plan, interval, user.country);
           const isCurrent = user.plan === plan.id;
+          const isIncluded = isPaid(user) && planRank(plan.id) < planRank(user.plan);
           return (
             <article key={plan.id} className={`price-card ${plan.id === "plus" ? "featured" : ""}`}>
               <span className="plan-badge">{plan.badge}</span>
@@ -1688,11 +1693,11 @@ function PricingWorkspace({ config, user, onUserChanged, onToast }) {
               <button
                 className={plan.id === "free" ? "ghost-btn full" : "primary-btn full"}
                 type="button"
-                disabled={isCurrent || plan.id === "free" || loadingPlan === plan.id}
+                disabled={isCurrent || isIncluded || plan.id === "free" || loadingPlan === plan.id}
                 onClick={() => checkout(plan.id)}
               >
                 {loadingPlan === plan.id ? <Loader2 className="spin" size={16} /> : <CircleDollarSign size={16} />}
-                {isCurrent ? "Current plan" : plan.id === "free" ? "Included" : "Pay with Paystack"}
+                {isCurrent ? "Current plan" : isIncluded || plan.id === "free" ? "Included" : "Pay with Paystack"}
               </button>
             </article>
           );

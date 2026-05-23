@@ -40,6 +40,10 @@ function priceForPlan(plan, country = "") {
   };
 }
 
+function planRank(planId = "free") {
+  return { free: 0, plus: 1, pro: 2, mentor: 3 }[planId] ?? 0;
+}
+
 export default function UpgradeModal({ plans, user, onClose, onUpgrade, onToast }) {
   const [loadingPlan, setLoadingPlan] = React.useState(null);
   const [error, setError] = React.useState("");
@@ -116,6 +120,7 @@ export default function UpgradeModal({ plans, user, onClose, onUpgrade, onToast 
           {(plans || []).map((plan) => {
             const isRecommended = plan.badge === "Best value" || plan.badge === "Recommended";
             const isCurrent = user?.plan === plan.id;
+            const isIncluded = user?.is_paid && planRank(plan.id) < planRank(user?.plan);
             const Icon = TIER_ICONS[plan.id] || Sparkles;
             const isLoading = loadingPlan === plan.id;
             const price = priceForPlan(plan, user?.country);
@@ -126,7 +131,7 @@ export default function UpgradeModal({ plans, user, onClose, onUpgrade, onToast 
                 className={`upgrade-tier-card ${isRecommended ? "recommended" : ""} ${isCurrent ? "current" : ""}`}
               >
                 {isRecommended && <span className="tier-recommended-badge">★ Recommended</span>}
-                {isCurrent && <span className="tier-current-badge">✓ Current</span>}
+                {(isCurrent || isIncluded) && <span className="tier-current-badge">✓ {isCurrent ? "Current" : "Included"}</span>}
 
                 <div className="tier-header">
                   <div className="tier-icon">
@@ -163,7 +168,7 @@ export default function UpgradeModal({ plans, user, onClose, onUpgrade, onToast 
                 <button
                   className={plan.id === "free" ? "ghost-btn full" : isRecommended ? "primary-btn full" : "secondary-btn full"}
                   type="button"
-                  disabled={isCurrent || plan.id === "free" || isLoading}
+                  disabled={isCurrent || isIncluded || plan.id === "free" || isLoading}
                   onClick={() => handleUpgrade(plan.id)}
                 >
                   {isLoading ? (
@@ -175,6 +180,8 @@ export default function UpgradeModal({ plans, user, onClose, onUpgrade, onToast 
                   )}
                   {isCurrent
                     ? "Current Plan"
+                    : isIncluded
+                    ? "Included"
                     : plan.id === "free"
                     ? "Your Plan"
                     : isLoading

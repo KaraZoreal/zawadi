@@ -62,7 +62,7 @@ const tiers = [
     description: "For applicants managing many countries, schools and deadlines.",
     features: [
       "Everything in Scholar Plus",
-      "50 AI essay generations/month",
+      "50 AI essays/day",
       "100 auto-applies/day",
       "Priority urgency feed",
       "Advanced school filters",

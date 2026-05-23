@@ -129,6 +129,7 @@ app.post(
 app.use(express.json({ limit: "16mb" }));
 
 const nowIso = () => new Date().toISOString();
+const planRank = (planId = "free") => ({ free: 0, plus: 1, pro: 2, mentor: 3 }[planId] ?? 0);
 
 const africanCountries = [
   "Algeria",
@@ -1670,6 +1671,10 @@ app.post("/api/billing/checkout", requireAuth, async (req, res, next) => {
       res.status(400).json({ error: "Choose a paid plan" });
       return;
     }
+    if (req.user.is_paid && planRank(planId) < planRank(req.user.plan)) {
+      res.status(400).json({ error: "This plan is already included in your current subscription." });
+      return;
+    }
 
     const checkoutCurrency = process.env.PAYSTACK_CURRENCY || currencyForCountry(req.user.country);
     const checkoutPrice = planPrice(plan, interval, checkoutCurrency);
@@ -1783,6 +1788,15 @@ app.post("/api/payment/initiate", requireAuth, async (req, res, next) => {
 
     if (!plan || plan.id === "free") {
       res.status(400).json({ error: "Choose a paid plan." });
+      return;
+    }
+    if (req.user.is_paid && planRank(planId) < planRank(req.user.plan)) {
+      res.json({
+        alreadyPaid: true,
+        included: true,
+        plan: localizePlan(plan, req.user.country),
+        message: "This plan is already included in your current subscription."
+      });
       return;
     }
 

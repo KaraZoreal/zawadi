@@ -159,6 +159,9 @@ input[type="checkbox"] {
   min-height: 100vh;
   display: grid;
   grid-template-columns: 268px minmax(0, 1fr);
+  background:
+    linear-gradient(90deg, #ffffff 0 268px, transparent 268px),
+    var(--bg);
 }
 
 .sidebar {
@@ -170,7 +173,8 @@ input[type="checkbox"] {
   flex-direction: column;
   gap: 22px;
   border-right: 1px solid var(--line);
-  background: var(--surface);
+  background: #16231f;
+  color: #f7fbf8;
 }
 
 .side-nav {
@@ -185,7 +189,7 @@ input[type="checkbox"] {
   gap: 10px;
   padding: 0 12px;
   border-radius: 8px;
-  color: var(--muted);
+  color: #b9c9c2;
   background: transparent;
   cursor: pointer;
   text-align: left;
@@ -194,8 +198,29 @@ input[type="checkbox"] {
 
 .side-nav button.active,
 .side-nav button:hover {
+  color: #ffffff;
+  background: rgba(224, 243, 235, 0.14);
+}
+
+.sidebar .brand-mark {
+  background: #e0f3eb;
   color: var(--green);
-  background: var(--green-soft);
+}
+
+.sidebar .brand-row span,
+.sidebar .muted {
+  color: #b9c9c2;
+}
+
+.sidebar .endpoint-box {
+  border-color: rgba(224, 243, 235, 0.18);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.sidebar .quiet-btn {
+  color: #f7fbf8;
+  border-color: rgba(224, 243, 235, 0.2);
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .admin-main {
@@ -309,6 +334,7 @@ input[type="checkbox"] {
   display: grid;
   align-content: center;
   gap: 4px;
+  border-top: 4px solid var(--green);
 }
 
 .metric span {
@@ -325,6 +351,12 @@ input[type="checkbox"] {
 .panel {
   padding: 18px;
   overflow: hidden;
+}
+
+.admin-section-grid {
+  display: grid;
+  grid-template-columns: minmax(320px, 1fr) minmax(320px, 1fr);
+  gap: 14px;
 }
 
 .grid-2 {
@@ -640,6 +672,7 @@ pre {
 @media (max-width: 1180px) {
   .admin-app {
     grid-template-columns: 1fr;
+    background: var(--bg);
   }
 
   .sidebar {
@@ -657,6 +690,10 @@ pre {
   }
 
   .grid-2 {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-section-grid {
     grid-template-columns: 1fr;
   }
 }
@@ -897,7 +934,9 @@ function renderSidebar() {
     ["overview", "Overview"],
     ["scholarships", "Scholarships"],
     ["users", "Users"],
-    ["subscriptions", "Subscriptions"]
+    ["subscriptions", "Subscriptions"],
+    ["ingestion", "Ingestion"],
+    ["audit", "Audit"]
   ];
   return h("aside", { className: "sidebar" },
     h("div", { className: "brand-row" },
@@ -927,7 +966,9 @@ function renderTopbar() {
     overview: ["Operations", "Website management"],
     scholarships: ["Scholarships", "Scholarship management"],
     users: ["Users", "User management"],
-    subscriptions: ["Subscriptions", "Subscription & billing management"]
+    subscriptions: ["Subscriptions", "Subscription & billing management"],
+    ingestion: ["Bot Ingestion", "Scholarship injection"],
+    audit: ["System Audit", "Production readiness"]
   };
   const [title, eyebrow] = titles[state.active] || titles.overview;
   return h("header", { className: "topbar" },
@@ -947,6 +988,8 @@ function renderActiveView() {
   if (state.active === "scholarships") return renderScholarships();
   if (state.active === "users") return renderUsers();
   if (state.active === "subscriptions") return renderSubscriptions();
+  if (state.active === "ingestion") return renderIngestion();
+  if (state.active === "audit") return renderAudit();
   return renderOverview();
 }
 
@@ -962,6 +1005,26 @@ function renderOverview() {
       metricCard("Total users", stats.totalUsers ?? 0),
       metricCard("Paid users", stats.paidUsers ?? 0),
       metricCard("Applications", stats.totalApplications ?? 0)
+    ),
+    h("section", { className: "admin-section-grid" },
+      h("article", { className: "panel" },
+        h("div", { className: "panel-head" },
+          h("div", {},
+            h("span", { className: "eyebrow" }, "Scholarship map"),
+            h("h2", {}, "Top categories")
+          )
+        ),
+        renderCategoryGrid((state.dashboard.categories || []).slice(0, 8))
+      ),
+      h("article", { className: "panel" },
+        h("div", { className: "panel-head" },
+          h("div", {},
+            h("span", { className: "eyebrow" }, "Data sources"),
+            h("h2", {}, "Where listings come from")
+          )
+        ),
+        renderSources((state.dashboard.sources || []).slice(0, 8))
+      )
     ),
     h("section", { className: "panel" },
       h("div", { className: "panel-head" },
@@ -1216,8 +1279,8 @@ function renderSubscriptions() {
       metricCard("Active", stats.active || 0),
       metricCard("Trials", stats.trial || 0),
       metricCard("Canceled", stats.canceled || 0),
-      metricCard("MRR KES", stats.monthlyRevenueKes || 0),
-      metricCard("Lifetime KES", stats.lifetimeRevenueKes || 0)
+      metricCard(`MRR ${stats.currency || "USD"}`, stats.monthlyRevenue || stats.monthlyRevenueKes || 0),
+      metricCard(`Lifetime ${stats.currency || "USD"}`, stats.lifetimeRevenue || stats.lifetimeRevenueKes || 0)
     ),
     h("section", { className: "panel" },
       h("div", { className: "panel-head" },
@@ -1273,13 +1336,13 @@ function renderSubscriptionTable(subscriptions) {
               h("small", {}, sub.trialEndsAt ? `Trial ends ${formatDate(sub.trialEndsAt)}` : "")
             ),
             h("td", {},
-              h("strong", {}, `${sub.subscriptionCurrency || "KES"} ${sub.subscriptionAmount || 0}`),
+              h("strong", {}, `${sub.subscriptionCurrency || "USD"} ${sub.subscriptionAmount || 0}`),
               h("span", {}, sub.subscriptionRenewsAt ? `Renews ${formatDate(sub.subscriptionRenewsAt)}` : "No renewal date"),
               h("small", {}, sub.subscriptionReference || "No reference")
             ),
             h("td", {},
               h("strong", {}, `${sub.paymentsCount} payment${sub.paymentsCount === 1 ? "" : "s"}`),
-              h("span", {}, `${sub.subscriptionCurrency || "KES"} ${sub.totalSpent || 0} total`),
+              h("span", {}, `${sub.subscriptionCurrency || "USD"} ${sub.totalSpent || 0} total`),
               h("small", {}, sub.lastPayment ? `Last: ${formatDate(sub.lastPayment.createdAt)}` : "No payments yet")
             ),
             h("td", {},
@@ -1734,7 +1797,7 @@ function renderSubscriptionModal(subscription) {
         h("label", {}, "Plan", selectInline(subscription.plan, state.dashboard.plans.map((plan) => [plan.id, plan.name]), () => {})),
         h("label", {}, "Status", selectInline(subscription.planStatus || "free", [["free", "free"], ["trial", "trial"], ["active", "active"], ["past_due", "past_due"], ["canceled", "canceled"], ["expired", "expired"]], () => {})),
         h("label", {}, "Subscription amount", h("input", { name: "subscriptionAmount", type: "number", min: "0", value: subscription.subscriptionAmount || 0 })),
-        h("label", {}, "Currency", h("input", { name: "subscriptionCurrency", value: subscription.subscriptionCurrency || "KES" })),
+        h("label", {}, "Currency", h("input", { name: "subscriptionCurrency", value: subscription.subscriptionCurrency || "USD" })),
         h("label", {}, "Reference", h("input", { name: "subscriptionReference", value: subscription.subscriptionReference || `admin-${Date.now()}` })),
         h("label", {}, "Renewal date", h("input", { name: "subscriptionRenewsAt", type: "datetime-local", value: toDateTimeLocal(subscription.subscriptionRenewsAt) })),
         h("label", {}, h("input", { name: "is_paid", type: "checkbox", checked: subscription.is_paid }), " Paid subscription"),
@@ -1767,7 +1830,7 @@ async function saveSubscription(event, subscription) {
     planStatus: selects[1].value,
     is_paid: form.elements.is_paid.checked,
     subscriptionAmount: Number(form.elements.subscriptionAmount.value || 0),
-    subscriptionCurrency: form.elements.subscriptionCurrency.value || "KES",
+    subscriptionCurrency: form.elements.subscriptionCurrency.value || "USD",
     subscriptionReference: form.elements.subscriptionReference.value,
     subscriptionRenewsAt: renewal,
     action: form.elements.is_paid.checked ? "activate" : "update"

@@ -5,16 +5,16 @@
 Use a freemium model:
 
 - Explorer: free forever.
-- Scholar Plus: KES 399/month or KES 3,990/year.
-- Application Pro: KES 999/month or KES 9,990/year.
-- Mentor Review: KES 2,999/month or KES 29,990/year.
+- Scholar Plus: USD 5/month or USD 50/year.
+- Application Pro: USD 12/month or USD 120/year.
+- Mentor Review: USD 29/month or USD 290/year.
 
 The reasoning:
 
 - Scholarship search has to stay free enough to build trust. Going Merry presents student scholarship matching and tracking as free, so Zawadi should not hide the basic database behind a paywall.
 - Paid value should sit in workflow power: premium filters, match scoring, document gap analysis, unlimited tracking, reminders and exports.
-- US education SaaS pricing is much higher, but that is not the right anchor for African student applicants. KES 399 is a low-friction monthly price for serious applicants, while KES 999 captures heavier users managing many countries and documents.
-- Paystack Kenya fees are material but manageable at these prices: M-PESA is listed at 1.5%, local cards at 2.9%, and international cards at 3.8%. Absorb fees at launch to keep checkout simple.
+- US education SaaS pricing is much higher, but that is not the right anchor for African student applicants. USD 5 is the minimum paid tier and keeps the first upgrade low-friction while still meeting the product floor.
+- Paystack fees vary by country and channel. Absorb fees at launch to keep checkout simple, and configure `PAYSTACK_CURRENCY` to the settlement currency supported by the active Paystack account.
 
 Sources used:
 
