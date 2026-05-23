@@ -2429,6 +2429,12 @@ app.use((error, _req, res, _next) => {
 if (isProduction || process.env.VERCEL === "1") {
   const distDir = path.join(rootDir, "dist");
   app.use(express.static(distDir));
+
+  // Admin page at /admin
+  app.get("/admin", (_req, res) => {
+    res.sendFile(path.join(distDir, "admin.html"));
+  });
+
   // SPA fallback — return index.html for all non-API routes
   app.get("*", (_req, res) => {
     res.sendFile(path.join(distDir, "index.html"));
@@ -2441,6 +2447,12 @@ if (isProduction || process.env.VERCEL === "1") {
     server: { middlewareMode: true },
     appType: "spa"
   });
+
+  // Admin page in dev mode
+  app.get("/admin", (_req, res) => {
+    res.sendFile(path.join(rootDir, "public", "admin.html"));
+  });
+
   app.use(vite.middlewares);
 }
 

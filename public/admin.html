@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Zawadi Admin</title>
+<style>
+:root {
+  --bg: #f8faf7; --surface: #fff; --text: #1a1f14; --muted: #6b7563;
+  --line: #e2e6dc; --blue: #2563eb; --gold: #b8860b; --green: #16a34a;
+  --red: #dc2626; --radius: 12px;
+  --font: 'Segoe UI', system-ui, -apple-system, sans-serif;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: var(--font); background: var(--bg); color: var(--text); min-height: 100vh; }
+
+/* Login */
+.login-shell {
+  display: flex; align-items: center; justify-content: center; min-height: 100vh;
+  background: linear-gradient(135deg, #f0f4eb 0%, #e8efe0 100%);
+}
+.login-card {
+  background: var(--surface); border-radius: 16px; padding: 40px; width: 100%;
+  max-width: 420px; box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+  border: 1px solid var(--line);
+}
+.login-card h1 { font-size: 24px; margin-bottom: 4px; }
+.login-card .sub { color: var(--muted); font-size: 14px; margin-bottom: 28px; }
+.login-card label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px; color: var(--muted); }
+.login-card input {
+  width: 100%; padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px;
+  font-size: 15px; font-family: var(--font); margin-bottom: 16px; outline: none;
+}
+.login-card input:focus { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(37,99,235,0.12); }
+.login-card button {
+  width: 100%; padding: 13px; border: none; border-radius: 10px; font-size: 15px;
+  font-weight: 700; cursor: pointer; background: var(--blue); color: #fff;
+  transition: all 0.15s;
+}
+.login-card button:hover { background: #1d4ed8; }
+.login-card .error { color: var(--red); font-size: 13px; margin-top: 12px; text-align: center; }
+
+/* Dashboard */
+.dash-shell { max-width: 1300px; margin: 0 auto; padding: 24px; }
+.topbar {
+  display: flex; align-items: center; justify-content: space-between; padding: 16px 24px;
+  background: var(--surface); border-radius: var(--radius); border: 1px solid var(--line);
+  margin-bottom: 20px;
+}
+.topbar h1 { font-size: 20px; }
+.topbar-actions { display: flex; gap: 8px; align-items: center; }
+.btn {
+  padding: 8px 16px; border-radius: 8px; border: 1px solid var(--line); cursor: pointer;
+  font-size: 13px; font-weight: 600; font-family: var(--font); background: var(--surface);
+  transition: all 0.12s;
+}
+.btn:hover { background: #f0f4eb; }
+.btn-primary { background: var(--blue); color: #fff; border-color: var(--blue); }
+.btn-primary:hover { background: #1d4ed8; }
+.btn-danger { background: var(--red); color: #fff; border-color: var(--red); }
+
+.metrics { display: grid; grid-template-columns: repeat(4,1fr); gap: 14px; margin-bottom: 20px; }
+.metric {
+  background: var(--surface); border-radius: var(--radius); padding: 18px 20px;
+  border: 1px solid var(--line);
+}
+.metric .label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
+.metric .value { font-size: 28px; font-weight: 800; margin-top: 4px; }
+
+.panel {
+  background: var(--surface); border-radius: var(--radius); padding: 20px 24px;
+  border: 1px solid var(--line); margin-bottom: 20px;
+}
+.panel-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+.panel-head h2 { font-size: 17px; }
+.panel-head .eyebrow { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
+
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th { text-align: left; padding: 10px 12px; border-bottom: 2px solid var(--line); color: var(--muted); font-weight: 700; font-size: 11px; text-transform: uppercase; }
+td { padding: 10px 12px; border-bottom: 1px solid var(--line); }
+tr:hover td { background: #fafcf7; }
+
+.pill {
+  display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 11px;
+  font-weight: 700; background: #eef2ff; color: var(--blue);
+}
+.pill-paid { background: #dcfce7; color: var(--green); }
+.pill-admin { background: #fef3c7; color: var(--gold); }
+
+select.pill-select {
+  padding: 5px 10px; border-radius: 20px; border: 1px solid var(--line);
+  font-size: 12px; font-weight: 600; cursor: pointer; font-family: var(--font);
+  background: var(--surface);
+}
+
+.toast {
+  position: fixed; bottom: 20px; right: 20px; background: #1a1f14; color: #fff;
+  padding: 12px 20px; border-radius: 10px; font-size: 14px; z-index: 100;
+  opacity: 0; transform: translateY(10px); transition: all 0.25s;
+}
+.toast.show { opacity: 1; transform: translateY(0); }
+
+.spin { animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+
+@media (max-width: 800px) {
+  .metrics { grid-template-columns: 1fr 1fr; }
+  .grid-2 { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<script>
+const API = '';
+
+async function apiCall(path, opts = {}) {
+  const headers = { 'Content-Type': 'application/json', ...(opts.headers || {}) };
+  const res = await fetch(API + path, { credentials: 'include', ...opts, headers });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || 'Request failed');
+  return data;
+}
+
+function toast(msg) {
+  const el = document.getElementById('toast') || (() => {
+    const t = document.createElement('div'); t.id = 'toast'; t.className = 'toast';
+    document.body.appendChild(t); return t;
+  })();
+  el.textContent = msg; el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 2600);
+}
+
+function h(tag, attrs = {}, ...children) {
+  const el = document.createElement(tag);
+  Object.entries(attrs).forEach(([k, v]) => {
+    if (k.startsWith('on')) el.addEventListener(k.slice(2).toLowerCase(), v);
+    else if (k === 'className') el.className = v;
+    else if (k === 'style') {
+      if (typeof v === 'string') {
+        v.split(';').filter(Boolean).forEach(s => {
+          const [prop, val] = s.split(':').map(x => x.trim());
+          if (prop) el.style[prop.replace(/-([a-z])/g, (_,c) => c.toUpperCase())] = val;
+        });
+      } else {
+        Object.assign(el.style, v);
+      }
+    }
+    else el.setAttribute(k, v);
+  });
+  children.forEach(c => el.append(typeof c === 'string' ? document.createTextNode(c) : c));
+  return el;
+}
+
+// ── State ──
+let adminUser = null;
+let adminData = null;
+
+// ── Login ──
+function renderLogin(error = '') {
+  const root = document.getElementById('app');
+  root.innerHTML = '';
+  root.appendChild(
+    h('div', { className: 'login-shell' },
+      h('div', { className: 'login-card' },
+        h('h1', {}, 'Zawadi Admin'),
+        h('p', { className: 'sub' }, 'Restricted access — authorized personnel only'),
+        h('label', {}, 'Email'),
+        h('input', { type: 'email', id: 'admin-email', placeholder: 'admin@zawadi.app', value: 'admin@zawadi.app' }),
+        h('label', {}, 'Password'),
+        h('input', { type: 'password', id: 'admin-password', placeholder: 'Enter admin password' }),
+        h('button', { onclick: handleLogin }, 'Sign in to Admin'),
+        error ? h('div', { className: 'error' }, error) : null
+      )
+    )
+  );
+}
+
+async function handleLogin() {
+  const email = document.getElementById('admin-email').value;
+  const password = document.getElementById('admin-password').value;
+  try {
+    const data = await apiCall('/api/admin/login', {
+      method: 'POST',
+      body: JSON.stringify({ email, password })
+    });
+    adminUser = data.user;
+    await loadDashboard();
+  } catch (err) {
+    renderLogin(err.message);
+  }
+}
+
+// ── Dashboard ──
+async function loadDashboard() {
+  try {
+    const data = await apiCall('/api/admin/users');
+    adminData = data;
+    renderDashboard();
+  } catch (err) {
+    document.getElementById('app').innerHTML = `<div class="login-shell"><div class="login-card"><h1>Session expired</h1><p class="sub">${err.message}</p><button onclick="renderLogin()">Back to login</button></div></div>`;
+  }
+}
+
+function renderDashboard() {
+  const d = adminData;
+  const users = d.users || [];
+  const plans = d.plans || [];
+  const stats = d.stats || {};
+  const adminClass = adminUser?.role === 'admin' ? 'pill pill-admin' : '';
+
+  const root = document.getElementById('app');
+  root.innerHTML = '';
+  root.appendChild(
+    h('div', { className: 'dash-shell' },
+      // Top bar
+      h('div', { className: 'topbar' },
+        h('div', {},
+          h('div', { className: 'eyebrow' }, 'ADMIN PANEL'),
+          h('h1', {}, 'Zawadi Scholarship Management')
+        ),
+        h('div', { className: 'topbar-actions' },
+          h('span', { className: 'pill pill-admin', style: 'marginRight:"8px"' }, 'Admin'),
+          h('button', { className: 'btn', onclick: loadDashboard }, '🔄 Refresh'),
+          h('button', { className: 'btn btn-danger', onclick: handleLogout }, 'Sign out')
+        )
+      ),
+      // Metrics
+      h('div', { className: 'metrics' },
+        metricCard('Total Scholarships', stats.totalScholarships || 0),
+        metricCard('Total Users', users.length),
+        metricCard('Applications', stats.totalApplications || 0),
+        metricCard('Documents', stats.totalDocuments || 0)
+      ),
+      // User Management
+      h('div', { className: 'panel' },
+        h('div', { className: 'panel-head' },
+          h('div', {},
+            h('div', { className: 'eyebrow' }, 'USER MANAGEMENT'),
+            h('h2', {}, `All Registered Users (${users.length})`)
+          ),
+          h('button', { className: 'btn', onclick: loadDashboard }, '🔄')
+        ),
+        h('table', {},
+          h('thead', {},
+            h('tr', {},
+              h('th', {}, 'User'), h('th', {}, 'Email'), h('th', {}, 'Country'),
+              h('th', {}, 'Plan'), h('th', {}, 'Paid'), h('th', {}, 'Apps'),
+              h('th', {}, 'Docs'), h('th', {}, 'Joined'), h('th', {}, 'Change Plan')
+            )
+          ),
+          h('tbody', {},
+            ...users.map(u =>
+              h('tr', {},
+                h('td', {},
+                  h('strong', {}, u.name),
+                  u.role === 'admin' ? h('span', { className: 'pill pill-admin', style: 'marginLeft:8px' }, 'Admin') : ''
+                ),
+                h('td', {}, u.email),
+                h('td', {}, u.country),
+                h('td', {}, h('span', { className: u.is_paid ? 'pill pill-paid' : 'pill' }, u.planName)),
+                h('td', {}, u.is_paid ? '✅' : '❌'),
+                h('td', {}, String(u.applicationsCount)),
+                h('td', {}, String(u.documentsCount)),
+                h('td', {}, new Date(u.createdAt).toLocaleDateString()),
+                h('td', {},
+                  h('select', {
+                    className: 'pill-select',
+                    onchange: (e) => updateUserPlan(u.id, e.target.value)
+                  },
+                    ...plans.map(p => {
+                      const opt = h('option', { value: p.id }, p.name);
+                      if (p.id === u.plan) opt.selected = true;
+                      return opt;
+                    })
+                  )
+                )
+              )
+            )
+          )
+        ),
+        !users.length ? h('div', { style: 'textAlign:center;padding:20px;color:var(--muted)' }, 'No users registered yet') : ''
+      )
+    )
+  );
+}
+
+function metricCard(label, value) {
+  return h('div', { className: 'metric' },
+    h('div', { className: 'label' }, label),
+    h('div', { className: 'value' }, String(value))
+  );
+}
+
+async function updateUserPlan(userId, planId) {
+  try {
+    await apiCall(`/api/admin/users/${userId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ plan: planId, is_paid: planId !== 'free' })
+    });
+    toast('✅ User plan updated');
+    await loadDashboard();
+  } catch (err) {
+    toast('❌ ' + err.message);
+  }
+}
+
+async function handleLogout() {
+  await apiCall('/api/auth/logout', { method: 'POST' }).catch(() => {});
+  adminUser = null;
+  adminData = null;
+  renderLogin();
+}
+
+// ── Init ──
+async function init() {
+  try {
+    const data = await apiCall('/api/admin/check');
+    if (data.isAdmin) {
+      adminUser = { role: 'admin', plan: 'mentor', planName: 'Mentor Review', country: 'Kenya', name: 'Administrator' };
+      await loadDashboard();
+      return;
+    }
+  } catch (e) {}
+  renderLogin();
+}
+
+init();
+</script>
+</body>
+</html>

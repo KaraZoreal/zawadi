@@ -110,7 +110,6 @@ function App() {
   const [booting, setBooting] = React.useState(true);
   const [config, setConfig] = React.useState(null);
   const [user, setUser] = React.useState(null);
-  const [isAdmin, setIsAdmin] = React.useState(false);
   const [rows, setRows] = React.useState([]);
   const [documents, setDocuments] = React.useState([]);
   const [stats, setStats] = React.useState(emptyStats());
@@ -158,12 +157,6 @@ function App() {
       setBooting(false);
     }
   }
-
-  // Check admin status whenever user changes
-  React.useEffect(() => {
-    if (!user) { setIsAdmin(false); return; }
-    api("/api/admin/check").then(d => setIsAdmin(d.isAdmin)).catch(() => setIsAdmin(false));
-  }, [user]);
 
   async function loadScholarships() {
     const data = await api("/api/scholarships");
@@ -237,7 +230,6 @@ function App() {
       <Portal
         config={config}
         user={user}
-        isAdmin={isAdmin}
         rows={rows}
         documents={documents}
         stats={stats}
@@ -302,15 +294,6 @@ function AuthScreen({ config, onAuthed, onBackToLanding }) {
     setError("");
 
     try {
-      // Admin login path
-      if (mode === "admin") {
-        const data = await api("/api/admin/login", {
-          method: "POST",
-          body: JSON.stringify({ email: form.email, password: form.password })
-        });
-        onAuthed(data.user);
-        return;
-      }
       if (supabaseClient) {
         if (mode === "register") {
           const { data, error: signUpError } = await supabaseClient.auth.signUp({
@@ -381,13 +364,6 @@ function AuthScreen({ config, onAuthed, onBackToLanding }) {
           >
             Create account
           </button>
-          <button
-            type="button"
-            className={mode === "admin" ? "active" : ""}
-            onClick={() => setMode("admin")}
-          >
-            Admin
-          </button>
         </div>
 
         <form className="auth-form" onSubmit={submit}>
@@ -441,7 +417,7 @@ function AuthScreen({ config, onAuthed, onBackToLanding }) {
           {error && <div className="form-error">{error}</div>}
           <button className="primary-btn full" type="submit" disabled={loading}>
             {loading ? <Loader2 className="spin" size={18} /> : <Check size={18} />}
-            {mode === "login" ? "Sign in" : mode === "admin" ? "Admin sign in" : "Create account"}
+            {mode === "login" ? "Sign in" : "Create account"}
           </button>
         </form>
       </section>
@@ -485,7 +461,6 @@ function BrandBlock() {
 function Portal({
   config,
   user,
-  isAdmin,
   rows,
   documents,
   stats,
@@ -551,7 +526,6 @@ function Portal({
           {navButton("intelligence", "Doc Intel", FileCheck2)}
           {navButton("documents", "Documents", FileText)}
           {navButton("pricing", "Pricing", CreditCard)}
-          {isAdmin && navButton("admin", "Admin", ShieldCheck)}
           <button type="button" onClick={() => setUploadOpen(true)}>
             <FileUp size={18} />
             Intake
@@ -651,14 +625,6 @@ function Portal({
           />
         )}
 
-        {view === "admin" && (
-          <AdminWorkspace
-            rows={rows}
-            onToast={onToast}
-            onRefresh={onRefresh}
-          />
-        )}
-
         {view === "application-center" && (
           <ApplicationCenter
             api={api}
@@ -735,7 +701,6 @@ function viewTitle(view) {
   if (view === "essay-generator") return "AI Essay Generator";
   if (view === "intelligence") return "Document Intelligence";
   if (view === "pricing") return "Pricing";
-  if (view === "admin") return "Admin — Scholarship Management";
   return "Command center";
 }
 
@@ -1548,175 +1513,6 @@ function PricingWorkspace({ config, user, onUserChanged, onToast }) {
             </article>
           );
         })}
-      </div>
-    </section>
-  );
-}
-
-function AdminWorkspace({ rows, onToast, onRefresh }) {
-  const [adminData, setAdminData] = React.useState(null);
-  const [loadingUsers, setLoadingUsers] = React.useState(false);
-
-  React.useEffect(() => { loadAdminData(); }, []);
-
-  async function loadAdminData() {
-    setLoadingUsers(true);
-    try {
-      const data = await api("/api/admin/users");
-      setAdminData(data);
-    } catch (err) {
-      onToast("Failed to load admin data: " + err.message);
-    } finally {
-      setLoadingUsers(false);
-    }
-  }
-
-  async function updateUserPlan(userId, planId) {
-    try {
-      await api(`/api/admin/users/${userId}`, {
-        method: "PATCH",
-        body: JSON.stringify({ plan: planId, is_paid: planId !== "free" })
-      });
-      onToast("User plan updated");
-      loadAdminData();
-      onRefresh();
-    } catch (err) {
-      onToast("Failed: " + err.message);
-    }
-  }
-
-  const bySource = React.useMemo(() => {
-    const map = {};
-    rows.forEach(r => {
-      const src = r.source || r.createdBy || "Unknown";
-      map[src] = (map[src] || 0) + 1;
-    });
-    return Object.entries(map).sort((a, b) => b[1] - a[1]);
-  }, [rows]);
-
-  const recent = React.useMemo(() =>
-    [...rows].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 20),
-    [rows]
-  );
-
-  const today = new Date().toISOString().slice(0, 10);
-  const todayCount = rows.filter(r => (r.createdAt || "").startsWith(today)).length;
-  const users = adminData?.users || [];
-  const plans = adminData?.plans || [];
-  const adminStats = adminData?.stats || {};
-
-  return (
-    <section className="admin-shell">
-      <div className="metrics" aria-label="Admin overview">
-        <MetricCard label="Total scholarships" value={rows.length} icon={<Database size={18} />} />
-        <MetricCard label="Added today" value={todayCount} icon={<Sparkles size={18} />} />
-        <MetricCard label="Total users" value={users.length} icon={<GraduationCap size={18} />} />
-        <MetricCard label="Zawadi Bot entries" value={rows.filter(r => (r.createdBy || "").includes("zawadi") || (r.source || "").includes("Zawadi")).length} icon={<Sparkles size={18} />} />
-      </div>
-
-      {/* ── User Management ── */}
-      <article className="panel">
-        <div className="panel-head">
-          <div>
-            <span className="eyebrow">User management</span>
-            <h2>All registered users ({users.length})</h2>
-          </div>
-          <button className="ghost-btn" type="button" onClick={loadAdminData} disabled={loadingUsers}>
-            {loadingUsers ? <Loader2 className="spin" size={16} /> : <Database size={16} />}
-            Refresh
-          </button>
-        </div>
-        <div className="sheet-shell" style={{maxHeight: 400, overflow: "auto"}}>
-          <table className="sheet-table portal-table">
-            <thead>
-              <tr>
-                <th>User</th>
-                <th>Email</th>
-                <th>Country</th>
-                <th>Plan</th>
-                <th>Paid</th>
-                <th>Apps</th>
-                <th>Docs</th>
-                <th>Joined</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {users.map(u => (
-                <tr key={u.id}>
-                  <td><strong>{u.name}</strong>{u.role === "admin" && <span className="plan-pill" style={{marginLeft: 8}}>Admin</span>}</td>
-                  <td><small>{u.email}</small></td>
-                  <td>{u.country}</td>
-                  <td><span className="plan-pill">{u.planName}</span></td>
-                  <td>{u.is_paid ? "✅" : "❌"}</td>
-                  <td>{u.applicationsCount}</td>
-                  <td>{u.documentsCount}</td>
-                  <td><small>{new Date(u.createdAt).toLocaleDateString()}</small></td>
-                  <td>
-                    <select
-                      className="cell-select compact"
-                      value={u.plan}
-                      onChange={e => updateUserPlan(u.id, e.target.value)}
-                    >
-                      {plans.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                    </select>
-                  </td>
-                </tr>
-              ))}
-              {!users.length && !loadingUsers && (
-                <tr><td colSpan={9} style={{textAlign:"center",padding:20,color:"var(--muted)"}}>No users registered yet</td></tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </article>
-
-      <div className="dashboard-grid">
-        <article className="panel">
-          <div className="panel-head">
-            <div>
-              <span className="eyebrow">Sources</span>
-              <h2>Scholarships by origin</h2>
-            </div>
-          </div>
-          <div className="source-list">
-            {bySource.map(([src, count]) => (
-              <div key={src} className="source-row">
-                <strong>{src}</strong>
-                <span className="plan-pill">{count} scholarships</span>
-              </div>
-            ))}
-            {!bySource.length && <span className="empty-mini">No data yet</span>}
-          </div>
-        </article>
-
-        <article className="panel">
-          <div className="panel-head">
-            <div>
-              <span className="eyebrow">Recent uploads</span>
-              <h2>Last 20 scholarships</h2>
-            </div>
-            <button className="ghost-btn" type="button" onClick={onRefresh}>
-              <Database size={16} />
-              Refresh
-            </button>
-          </div>
-          <div className="recent-list">
-            {recent.map(r => (
-              <div key={r.id} className="recent-row">
-                <div>
-                  <strong>{r.name}</strong>
-                  <span>{r.host || r.provider} — {r.fundingType}</span>
-                </div>
-                <div className="recent-meta">
-                  <small>{r.createdBy || "system"}</small>
-                  <small>{new Date(r.createdAt).toLocaleDateString()}</small>
-                </div>
-              </div>
-            ))}
-            {!recent.length && <span className="empty-mini">No scholarships uploaded yet</span>}
-          </div>
-        </article>
       </div>
     </section>
   );
