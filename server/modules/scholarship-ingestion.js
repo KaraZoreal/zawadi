@@ -28,6 +28,27 @@ const text = (value, fallback = "") => {
 
 const nowIso = () => new Date().toISOString();
 
+function list(value) {
+  if (Array.isArray(value)) return value.map((item) => text(item)).filter(Boolean);
+  return text(value)
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function uniqueList(values) {
+  const seen = new Set();
+  return values
+    .map((value) => text(value))
+    .filter(Boolean)
+    .filter((value) => {
+      const key = value.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+}
+
 function normalizeScholarship(input) {
   return {
     name: text(input.NAME || input.name, "Untitled scholarship"),
@@ -40,6 +61,7 @@ function normalizeScholarship(input) {
     ai_ml_track: parseBool(input.AI_ML_TRACK ?? input.ai_ml_track, false),
     barrier: text(input.BARRIER || input.barrier, ""),
     apply_url: text(input.APPLY || input.apply_url || input.apply, ""),
+    categories: list(input.CATEGORIES || input.CATEGORY || input.categories || input.category),
   };
 }
 
@@ -57,7 +79,7 @@ function parseBool(value, fallback = false) {
 // Local DB helpers
 // ---------------------------------------------------------------------------
 
-const DATA_DIR = path.resolve(__dirname, "..", "data");
+const DATA_DIR = process.env.VERCEL ? "/tmp" : path.resolve(__dirname, "..", "data");
 const DB_PATH = path.join(DATA_DIR, "zawadi-db.json");
 
 async function loadLocalDb() {
@@ -97,6 +119,7 @@ function toLocalScholarship(record, source = "Zawadi Bot") {
 
   const now = nowIso();
   const dedupKey = `${record.name.toLowerCase().trim()}::${record.host.toLowerCase().trim()}`;
+  const categories = inferCategories(record);
 
   return {
     id: `sch-ingest-${Buffer.from(dedupKey).toString("hex").slice(0, 16)}`,
@@ -123,12 +146,41 @@ function toLocalScholarship(record, source = "Zawadi Bot") {
     officialUrl: record.apply_url,
     source,
     tags: record.ai_ml_track ? ["ai", "ml", "tech"] : [],
+    categories,
+    category: categories[0] || "General",
     createdAt: now,
     updatedAt: now,
     verifiedAt: "",
     createdBy: "zawadi-bot",
     _dedupKey: dedupKey
   };
+}
+
+function inferCategories(record) {
+  const haystack = [
+    record.name,
+    record.host,
+    record.field,
+    record.degree,
+    record.funding,
+    record.barrier,
+    ...(record.categories || [])
+  ].join(" ").toLowerCase();
+  const categories = [...(record.categories || [])];
+  const add = (label, terms) => {
+    if (terms.some((term) => haystack.includes(term))) categories.push(label);
+  };
+
+  if (record.africa_eligible) categories.push("Africa eligible");
+  if (record.ai_ml_track) categories.push("AI, Data & STEM");
+  add("Fully funded", ["fully funded", "full tuition", "stipend"]);
+  add("Partial funding", ["partial", "fee waiver", "tuition support"]);
+  add("Masters", ["masters", "master", "msc", "ma ", "mba"]);
+  add("Undergraduate", ["undergraduate", "bachelor"]);
+  add("PhD & Research", ["phd", "doctoral", "doctorate", "research"]);
+  add("Public Health & Development", ["public health", "development", "policy", "climate"]);
+  add("Leadership & Business", ["leadership", "business", "entrepreneur"]);
+  return uniqueList(categories).slice(0, 8);
 }
 
 // ---------------------------------------------------------------------------
@@ -248,12 +300,23 @@ async function ingestScholarships(req, res) {
     // --- Try Supabase write ---
     if (supabase) {
       try {
-        const { error } = await supabase
+        let { error } = await supabase
           .from("scholarships")
           .upsert(record, {
             onConflict: "name,host",
             ignoreDuplicates: false,
           });
+
+        if (error && /categor/i.test(error.message || "")) {
+          const { categories: _categories, ...supabaseRecord } = record;
+          const retry = await supabase
+            .from("scholarships")
+            .upsert(supabaseRecord, {
+              onConflict: "name,host",
+              ignoreDuplicates: false,
+            });
+          error = retry.error;
+        }
 
         if (error) {
           // RLS or other Supabase error — continue to local write anyway
@@ -310,9 +373,7 @@ async function ingestScholarships(req, res) {
 
 const router = Router();
 
-router.use(requireIngestApiKey);
-
-router.post("/ingest", (req, res, next) => {
+router.post("/ingest", requireIngestApiKey, (req, res, next) => {
   ingestScholarships(req, res).catch(next);
 });
 

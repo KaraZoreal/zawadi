@@ -39,6 +39,7 @@ CREATE TABLE IF NOT EXISTS scholarships (
   ai_ml_track BOOLEAN NOT NULL DEFAULT false,
   barrier TEXT NOT NULL DEFAULT '',
   apply_url TEXT NOT NULL DEFAULT '',
+  categories TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
 
@@ -81,6 +82,9 @@ CREATE INDEX IF NOT EXISTS idx_scholarships_field
 
 CREATE INDEX IF NOT EXISTS idx_scholarships_funding
   ON scholarships (funding);
+
+CREATE INDEX IF NOT EXISTS idx_scholarships_categories
+  ON scholarships USING gin (categories);
 
 CREATE INDEX IF NOT EXISTS idx_scholarships_deadline
   ON scholarships (deadline);

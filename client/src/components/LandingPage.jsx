@@ -18,57 +18,55 @@ import {
 const tiers = [
   {
     id: "free",
-    name: "Free",
-    price: "$0",
+    name: "Explorer",
+    price: "Free",
     period: "forever",
-    badge: "Starter",
-    description: "Dip your toes in — find and track a few scholarships at no cost.",
+    badge: "Free",
+    description: "Scholarship discovery and basic application tracking.",
     features: [
-      "Up to 3 scholarship matches",
-      "1 AI essay draft",
-      "Basic deadline tracking",
-      "Document checklist",
-      "Email support",
+      "Open scholarship database",
+      "Basic country, level and field filters",
+      "10 tracked applications",
+      "3 document records",
+      "Weekly in-app updates",
     ],
     cta: "Start Free",
     accent: false,
   },
   {
-    id: "season",
-    name: "Season Pass",
-    price: "$20",
-    period: "one-time · 6 months",
-    badge: "Most Popular",
-    description: "Everything you need for a full application season.",
+    id: "plus",
+    name: "Scholar Plus",
+    price: "KES 399",
+    period: "per month",
+    badge: "Best value",
+    description: "Premium matching and deadline control for active applicants.",
     features: [
-      "Unlimited scholarship matches",
-      "Unlimited AI essay drafts",
-      "Priority deadline alerts",
-      "Full document vault",
-      "Application tracker",
-      "Match score insights",
-      "Priority email support",
+      "Unlimited application tracking",
+      "Premium filters",
+      "Smart match score",
+      "Document gap analysis",
+      "20 auto-applies/day",
+      "Document intelligence analysis",
     ],
-    cta: "Get Season Pass",
+    cta: "Get Scholar Plus",
     accent: true,
   },
   {
-    id: "premium",
-    name: "Premium",
-    price: "$50",
-    period: "one-time · lifetime",
-    badge: "Complete",
-    description: "The whole toolkit — for students serious about winning scholarships.",
+    id: "pro",
+    name: "Application Pro",
+    price: "KES 999",
+    period: "per month",
+    badge: "Power user",
+    description: "For applicants managing many countries, schools and deadlines.",
     features: [
-      "Everything in Season Pass",
-      "Document review & feedback",
-      "Essay templates library",
-      "CV/resume builder",
-      "Scholarship interview prep",
-      "Priority chat support",
-      "Early access to new features",
+      "Everything in Scholar Plus",
+      "50 AI essay generations/month",
+      "100 auto-applies/day",
+      "Priority urgency feed",
+      "Advanced school filters",
+      "CSV exports and intake tools",
     ],
-    cta: "Go Premium",
+    cta: "Go Pro",
     accent: false,
   },
 ];
@@ -114,7 +112,7 @@ const testimonials = [
   },
   {
     quote:
-      "The AI essay generator helped me craft a statement of purpose that got me a fully-funded Masters. Worth every cent of the Season Pass.",
+      "The AI essay generator helped me craft a statement of purpose that got me a fully-funded Masters. Worth every cent of Scholar Plus.",
     name: "Fatima O.",
     role: "MSc Public Health · University of Toronto",
     country: "Nigeria",
@@ -123,11 +121,11 @@ const testimonials = [
 
 export default function LandingPage({ onGetStarted, onLogin }) {
   return (
-    <div className="landing-root">
+    <div className="landing-root" id="top">
       {/* ── NAV ─────────────────────────────────────────────── */}
       <header className="landing-nav">
         <div className="landing-nav-inner">
-          <a href="#" className="landing-logo" aria-label="Techsari Zawadi home">
+          <a href="#top" className="landing-logo" aria-label="Techsari Zawadi home">
             <div className="brand-mark" aria-hidden="true">
               <GraduationCap size={22} />
             </div>
@@ -307,8 +305,8 @@ export default function LandingPage({ onGetStarted, onLogin }) {
           <span className="eyebrow">Pricing</span>
           <h2>Start free. Upgrade when you're ready.</h2>
           <p>
-            One-time payments, no subscriptions. Pay once and use Zawadi for the
-            full application season.
+            Keep discovery free, then upgrade monthly when you need more AI,
+            filters, and application automation.
           </p>
         </div>
         <div className="landing-pricing-grid">
@@ -406,7 +404,7 @@ export default function LandingPage({ onGetStarted, onLogin }) {
       <footer className="landing-footer">
         <div className="landing-footer-grid">
           <div className="landing-footer-brand">
-            <a href="#" className="landing-logo" aria-label="Techsari Zawadi">
+            <a href="#top" className="landing-logo" aria-label="Techsari Zawadi">
               <div className="brand-mark" aria-hidden="true">
                 <GraduationCap size={20} />
               </div>
@@ -428,15 +426,15 @@ export default function LandingPage({ onGetStarted, onLogin }) {
           </div>
           <div className="landing-footer-col">
             <h4>Resources</h4>
-            <a href="#">Scholarship guide</a>
-            <a href="#">Essay templates</a>
-            <a href="#">FAQ</a>
+            <a href="#how-it-works">Scholarship guide</a>
+            <a href="#features">Essay tools</a>
+            <a href="#pricing">FAQ</a>
           </div>
           <div className="landing-footer-col">
             <h4>Company</h4>
-            <a href="#">About Techsari</a>
-            <a href="#">Contact</a>
-            <a href="#">Privacy</a>
+            <a href="#features">About Techsari</a>
+            <a href="mailto:hello@techsari.africa">Contact</a>
+            <a href="#pricing">Plans and privacy</a>
           </div>
         </div>
         <div className="landing-footer-bottom">

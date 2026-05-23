@@ -30,7 +30,7 @@ export default function EssayGenerator({ api, scholarships = [], user, onToast, 
   const [error, setError] = React.useState("");
   const [activeStage, setActiveStage] = React.useState(null);
   const [uploadingSample, setUploadingSample] = React.useState(false);
-  const [sampleText, setSampleText] = React.useState("");
+  const [sampleFile, setSampleFile] = React.useState(null);
   const [sampleTitle, setSampleTitle] = React.useState("");
   const [generationCount, setGenerationCount] = React.useState(0);
   const [usageLoading, setUsageLoading] = React.useState(true);
@@ -124,21 +124,54 @@ export default function EssayGenerator({ api, scholarships = [], user, onToast, 
     }
   }
 
+  function fileToDataUrl(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(reader.error || new Error("Could not read file"));
+      reader.readAsDataURL(file);
+    });
+  }
+
   async function uploadSample() {
-    if (!sampleText || sampleText.length < 50) {
-      setError("Sample too short — please provide at least 50 characters");
+    if (!sampleFile) {
+      setError("Choose an essay document to upload.");
+      return;
+    }
+    const allowed = [
+      "application/pdf",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    ];
+    const lowerName = sampleFile.name.toLowerCase();
+    const hasAllowedExtension = [".pdf", ".docx"].some((ext) => lowerName.endsWith(ext));
+    if (!allowed.includes(sampleFile.type) && !hasAllowedExtension) {
+      setError("Upload an essay as PDF or DOCX.");
+      return;
+    }
+    if (sampleFile.size > 10 * 1024 * 1024) {
+      setError("Essay document is too large. Upload a file under 10 MB.");
       return;
     }
     setUploadingSample(true);
     setError("");
     try {
-      const data = await api("/api/essays/samples", {
+      const fileData = await fileToDataUrl(sampleFile);
+      const data = await api("/api/essays/samples/upload", {
         method: "POST",
-        body: JSON.stringify({ content: sampleText, title: sampleTitle || "My Writing Sample", type: "essay" })
+        body: JSON.stringify({
+          fileName: sampleFile.name,
+          mimeType: sampleFile.type,
+          size: sampleFile.size,
+          data: fileData,
+          title: sampleTitle || sampleFile.name.replace(/\.[^.]+$/, ""),
+          type: "essay"
+        })
       });
-      onToast("Writing sample uploaded ✓");
-      setSampleText("");
+      onToast(`Essay document uploaded: ${data.extraction?.wordCount || data.sample.wordCount} words extracted`);
+      setSampleFile(null);
       setSampleTitle("");
+      const input = document.getElementById("essay-sample-file");
+      if (input) input.value = "";
       await loadSamples();
     } catch (err) {
       setError(err.message);
@@ -207,8 +240,8 @@ export default function EssayGenerator({ api, scholarships = [], user, onToast, 
       </div>
 
       <p className="helper-text">
-        Upload writing samples you've authored before. The AI learns your voice, then generates
-        a personalized essay through three refinement stages — no two users get the same essay.
+        Upload essay documents you've authored before. Zawadi extracts the full text from PDF
+        or DOCX files, stores the document, and uses it to learn your voice.
       </p>
 
       {/* Free tier limit banner */}
@@ -256,23 +289,31 @@ export default function EssayGenerator({ api, scholarships = [], user, onToast, 
 
         {/* Upload new sample */}
         <div className="sample-upload">
-          <textarea
-            placeholder="Paste a writing sample you've written (essay, personal statement, article)..."
-            value={sampleText}
-            onChange={(e) => setSampleText(e.target.value)}
-            rows={5}
-          />
+          <label className="file-drop compact-drop essay-file-drop">
+            <Upload size={22} />
+            <span>{sampleFile ? sampleFile.name : "Upload essay PDF or DOCX"}</span>
+            <input
+              id="essay-sample-file"
+              type="file"
+              accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+              onChange={(e) => setSampleFile(e.target.files?.[0] || null)}
+            />
+          </label>
           <div className="sample-upload-row">
             <input
               placeholder="Title (optional)"
               value={sampleTitle}
               onChange={(e) => setSampleTitle(e.target.value)}
             />
-            <button className="secondary-btn" onClick={uploadSample} disabled={uploadingSample || !sampleText}>
+            <button className="secondary-btn" onClick={uploadSample} disabled={uploadingSample || !sampleFile}>
               {uploadingSample ? <Loader2 className="spin" size={16} /> : <Upload size={16} />}
-              Upload Sample
+              Extract & Store
             </button>
           </div>
+          <p className="helper-text compact-helper">
+            Only essay-style documents are accepted here: personal statements, scholarship essays,
+            statements of purpose, motivation letters, leadership essays, and study plans.
+          </p>
         </div>
       </section>
 

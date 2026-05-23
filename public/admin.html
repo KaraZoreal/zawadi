@@ -3,328 +3,1777 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Zawadi Admin</title>
+<title>Zawadi Admin Console</title>
 <style>
 :root {
-  --bg: #f8faf7; --surface: #fff; --text: #1a1f14; --muted: #6b7563;
-  --line: #e2e6dc; --blue: #2563eb; --gold: #b8860b; --green: #16a34a;
-  --red: #dc2626; --radius: 12px;
-  --font: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  color-scheme: light;
+  --bg: #f5f7f4;
+  --surface: #ffffff;
+  --surface-alt: #eef3ed;
+  --ink: #17221f;
+  --muted: #65746e;
+  --line: #dce4dc;
+  --line-strong: #bdc9c1;
+  --green: #0f6e56;
+  --green-soft: #e0f3eb;
+  --blue: #315d91;
+  --blue-soft: #e6eef7;
+  --gold: #8a671f;
+  --gold-soft: #f7ebd2;
+  --red: #b53a3a;
+  --red-soft: #f7dddd;
+  --shadow: 0 18px 50px rgba(28, 42, 37, 0.12);
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
-* { margin: 0; padding: 0; box-sizing: border-box; }
-body { font-family: var(--font); background: var(--bg); color: var(--text); min-height: 100vh; }
 
-/* Login */
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--ink);
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button { border: 0; }
+
+a { color: inherit; }
+
 .login-shell {
-  display: flex; align-items: center; justify-content: center; min-height: 100vh;
-  background: linear-gradient(135deg, #f0f4eb 0%, #e8efe0 100%);
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background:
+    linear-gradient(135deg, rgba(224, 243, 235, 0.78), rgba(230, 238, 247, 0.72)),
+    repeating-linear-gradient(0deg, rgba(15, 110, 86, 0.08) 0, rgba(15, 110, 86, 0.08) 1px, transparent 1px, transparent 44px);
 }
+
 .login-card {
-  background: var(--surface); border-radius: 16px; padding: 40px; width: 100%;
-  max-width: 420px; box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+  width: min(430px, 100%);
+  padding: 32px;
   border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
 }
-.login-card h1 { font-size: 24px; margin-bottom: 4px; }
-.login-card .sub { color: var(--muted); font-size: 14px; margin-bottom: 28px; }
-.login-card label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px; color: var(--muted); }
-.login-card input {
-  width: 100%; padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px;
-  font-size: 15px; font-family: var(--font); margin-bottom: 16px; outline: none;
-}
-.login-card input:focus { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(37,99,235,0.12); }
-.login-card button {
-  width: 100%; padding: 13px; border: none; border-radius: 10px; font-size: 15px;
-  font-weight: 700; cursor: pointer; background: var(--blue); color: #fff;
-  transition: all 0.15s;
-}
-.login-card button:hover { background: #1d4ed8; }
-.login-card .error { color: var(--red); font-size: 13px; margin-top: 12px; text-align: center; }
 
-/* Dashboard */
-.dash-shell { max-width: 1300px; margin: 0 auto; padding: 24px; }
-.topbar {
-  display: flex; align-items: center; justify-content: space-between; padding: 16px 24px;
-  background: var(--surface); border-radius: var(--radius); border: 1px solid var(--line);
-  margin-bottom: 20px;
+.brand-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 22px;
 }
-.topbar h1 { font-size: 20px; }
-.topbar-actions { display: flex; gap: 8px; align-items: center; }
-.btn {
-  padding: 8px 16px; border-radius: 8px; border: 1px solid var(--line); cursor: pointer;
-  font-size: 13px; font-weight: 600; font-family: var(--font); background: var(--surface);
-  transition: all 0.12s;
-}
-.btn:hover { background: #f0f4eb; }
-.btn-primary { background: var(--blue); color: #fff; border-color: var(--blue); }
-.btn-primary:hover { background: #1d4ed8; }
-.btn-danger { background: var(--red); color: #fff; border-color: var(--red); }
 
-.metrics { display: grid; grid-template-columns: repeat(4,1fr); gap: 14px; margin-bottom: 20px; }
-.metric {
-  background: var(--surface); border-radius: var(--radius); padding: 18px 20px;
+.brand-mark {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  color: #fff;
+  background: var(--green);
+  font-weight: 900;
+  box-shadow: 0 10px 22px rgba(15, 110, 86, 0.2);
+}
+
+.brand-row strong,
+.brand-row span {
+  display: block;
+}
+
+.brand-row span {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.login-card h1 {
+  margin: 0 0 8px;
+  font-size: 28px;
+  line-height: 1.1;
+}
+
+.login-card p {
+  margin: 0 0 22px;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+label {
+  display: block;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 760;
+}
+
+input,
+select,
+textarea {
+  width: 100%;
+  min-height: 42px;
+  margin-top: 7px;
+  padding: 0 12px;
   border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink);
+  background: var(--surface);
+  outline: 0;
 }
-.metric .label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
-.metric .value { font-size: 28px; font-weight: 800; margin-top: 4px; }
 
-.panel {
-  background: var(--surface); border-radius: var(--radius); padding: 20px 24px;
-  border: 1px solid var(--line); margin-bottom: 20px;
+textarea {
+  min-height: 96px;
+  padding: 12px;
+  resize: vertical;
 }
-.panel-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
-.panel-head h2 { font-size: 17px; }
-.panel-head .eyebrow { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
 
-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-th { text-align: left; padding: 10px 12px; border-bottom: 2px solid var(--line); color: var(--muted); font-weight: 700; font-size: 11px; text-transform: uppercase; }
-td { padding: 10px 12px; border-bottom: 1px solid var(--line); }
-tr:hover td { background: #fafcf7; }
-
-.pill {
-  display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 11px;
-  font-weight: 700; background: #eef2ff; color: var(--blue);
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: var(--green);
+  box-shadow: 0 0 0 3px rgba(15, 110, 86, 0.12);
 }
-.pill-paid { background: #dcfce7; color: var(--green); }
-.pill-admin { background: #fef3c7; color: var(--gold); }
 
-select.pill-select {
-  padding: 5px 10px; border-radius: 20px; border: 1px solid var(--line);
-  font-size: 12px; font-weight: 600; cursor: pointer; font-family: var(--font);
+input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  min-height: auto;
+  margin: 0 8px 0 0;
+  accent-color: var(--green);
+}
+
+.form-grid {
+  display: grid;
+  gap: 14px;
+}
+
+.admin-app {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 268px minmax(0, 1fr);
+}
+
+.sidebar {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  padding: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  border-right: 1px solid var(--line);
   background: var(--surface);
 }
 
-.toast {
-  position: fixed; bottom: 20px; right: 20px; background: #1a1f14; color: #fff;
-  padding: 12px 20px; border-radius: 10px; font-size: 14px; z-index: 100;
-  opacity: 0; transform: translateY(10px); transition: all 0.25s;
+.side-nav {
+  display: grid;
+  gap: 8px;
 }
-.toast.show { opacity: 1; transform: translateY(0); }
 
-.spin { animation: spin 1s linear infinite; }
-@keyframes spin { to { transform: rotate(360deg); } }
+.side-nav button {
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 12px;
+  border-radius: 8px;
+  color: var(--muted);
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  font-weight: 780;
+}
 
-.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.side-nav button.active,
+.side-nav button:hover {
+  color: var(--green);
+  background: var(--green-soft);
+}
 
-@media (max-width: 800px) {
-  .metrics { grid-template-columns: 1fr 1fr; }
-  .grid-2 { grid-template-columns: 1fr; }
+.admin-main {
+  min-width: 0;
+  padding: 26px;
+  display: grid;
+  gap: 18px;
+  align-content: start;
+}
+
+.topbar,
+.panel-head,
+.toolbar,
+.row-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.topbar h1,
+.panel h2 {
+  margin: 3px 0 0;
+  line-height: 1.12;
+  letter-spacing: 0;
+}
+
+.topbar h1 { font-size: 32px; }
+.panel h2 { font-size: 21px; }
+
+.eyebrow {
+  display: block;
+  color: var(--green);
+  font-size: 12px;
+  font-weight: 880;
+  text-transform: uppercase;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.btn,
+.primary-btn,
+.danger-btn,
+.quiet-btn {
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-radius: 8px;
+  padding: 0 14px;
+  cursor: pointer;
+  font-weight: 780;
+  white-space: nowrap;
+}
+
+.primary-btn {
+  color: #fff;
+  background: var(--green);
+  box-shadow: 0 10px 22px rgba(15, 110, 86, 0.18);
+}
+
+.danger-btn {
+  color: #fff;
+  background: var(--red);
+}
+
+.quiet-btn,
+.btn {
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+
+.btn:hover,
+.quiet-btn:hover {
+  background: var(--surface-alt);
+}
+
+.btn:disabled,
+.primary-btn:disabled,
+.danger-btn:disabled {
+  opacity: 0.62;
+  cursor: not-allowed;
+}
+
+.full { width: 100%; }
+
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(140px, 1fr));
+  gap: 12px;
+}
+
+.metric,
+.panel,
+.category-card,
+.issue-card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: 0 8px 24px rgba(28, 42, 37, 0.05);
+}
+
+.metric {
+  min-height: 92px;
+  padding: 16px;
+  display: grid;
+  align-content: center;
+  gap: 4px;
+}
+
+.metric span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 820;
+}
+
+.metric strong {
+  font-size: 30px;
+  line-height: 1;
+}
+
+.panel {
+  padding: 18px;
+  overflow: hidden;
+}
+
+.grid-2 {
+  display: grid;
+  grid-template-columns: minmax(320px, 1fr) minmax(320px, 1fr);
+  gap: 14px;
+}
+
+.category-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(170px, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.category-card {
+  min-height: 118px;
+  padding: 14px;
+  display: grid;
+  align-content: start;
+  gap: 8px;
+}
+
+.category-card span,
+.category-card strong,
+.category-card small {
+  display: block;
+}
+
+.category-card span {
+  color: var(--green);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.category-card strong {
+  font-size: 28px;
+}
+
+.category-card small {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.toolbar {
+  margin-bottom: 14px;
+  justify-content: flex-start;
+}
+
+.toolbar label {
+  min-width: 180px;
+  flex: 1 1 190px;
+}
+
+.toolbar .search-label {
+  flex: 2 1 300px;
+}
+
+.table-shell {
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+table {
+  width: 100%;
+  min-width: 980px;
+  border-collapse: separate;
+  border-spacing: 0;
+  table-layout: fixed;
+}
+
+th,
+td {
+  padding: 10px;
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+
+th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  color: #43524d;
+  background: #eef5ee;
+  font-size: 12px;
+  font-weight: 880;
+}
+
+tr:last-child td { border-bottom: 0; }
+th:last-child, td:last-child { border-right: 0; }
+
+td strong,
+td span,
+td small {
+  display: block;
+}
+
+td span,
+td small {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  border-radius: 999px;
+  padding: 0 9px;
+  color: var(--blue);
+  background: var(--blue-soft);
+  font-size: 11px;
+  font-weight: 850;
+}
+
+.pill.green {
+  color: var(--green);
+  background: var(--green-soft);
+}
+
+.pill.gold {
+  color: var(--gold);
+  background: var(--gold-soft);
+}
+
+.pill.red {
+  color: var(--red);
+  background: var(--red-soft);
+}
+
+.tag-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.source-list,
+.recent-list,
+.issue-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.source-row,
+.recent-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  padding: 11px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcf9;
+}
+
+.recent-row a {
+  color: var(--green);
+  font-size: 12px;
+  font-weight: 820;
+  text-decoration: none;
+}
+
+.issue-card {
+  padding: 14px;
+  display: grid;
+  gap: 8px;
+}
+
+.issue-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.issue-card p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.endpoint-box {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcf9;
+}
+
+code,
+pre {
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+}
+
+pre {
+  margin: 0;
+  overflow: auto;
+  padding: 12px;
+  border-radius: 8px;
+  color: #263530;
+  background: #eef3ed;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.empty {
+  min-height: 160px;
+  display: grid;
+  place-items: center;
+  border: 1px dashed var(--line-strong);
+  border-radius: 8px;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.65);
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(22, 35, 31, 0.42);
+}
+
+.modal {
+  width: min(900px, 100%);
+  max-height: min(880px, calc(100vh - 36px));
+  overflow: auto;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.modal.small {
+  width: min(560px, 100%);
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.modal-header h2 {
+  margin: 0;
+  font-size: 22px;
+}
+
+.editor-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.editor-grid label.wide {
+  grid-column: 1 / -1;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 16px;
+  flex-wrap: wrap;
+}
+
+.error {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  color: var(--red);
+  background: var(--red-soft);
+  font-size: 13px;
+}
+
+.toast {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 30;
+  max-width: min(420px, calc(100vw - 40px));
+  padding: 12px 16px;
+  border-radius: 8px;
+  color: #fff;
+  background: #17221f;
+  box-shadow: var(--shadow);
+  transform: translateY(16px);
+  opacity: 0;
+  pointer-events: none;
+  transition: transform 0.18s ease, opacity 0.18s ease;
+}
+
+.toast.show {
+  transform: translateY(0);
+  opacity: 1;
+}
+
+@media (max-width: 1180px) {
+  .admin-app {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    position: static;
+    height: auto;
+  }
+
+  .side-nav {
+    grid-template-columns: repeat(6, minmax(120px, 1fr));
+  }
+
+  .metrics,
+  .category-grid {
+    grid-template-columns: repeat(2, minmax(180px, 1fr));
+  }
+
+  .grid-2 {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .admin-main,
+  .sidebar,
+  .login-card {
+    padding: 18px;
+  }
+
+  .metrics,
+  .category-grid,
+  .editor-grid,
+  .side-nav {
+    grid-template-columns: 1fr;
+  }
+
+  .topbar h1 {
+    font-size: 25px;
+  }
+
+  .toolbar label,
+  .toolbar button,
+  .row-actions button,
+  .modal-actions button {
+    width: 100%;
+  }
 }
 </style>
 </head>
 <body>
 <div id="app"></div>
+<div id="toast" class="toast"></div>
 
 <script>
-const API = '';
+const state = {
+  user: null,
+  dashboard: null,
+  active: "overview",
+  scholarshipSearch: "",
+  scholarshipCategory: "All categories",
+  scholarshipSource: "All sources",
+  userSearch: "",
+  subscriptionSearch: "",
+  modal: null,
+  loading: false
+};
 
-async function apiCall(path, opts = {}) {
-  const headers = { 'Content-Type': 'application/json', ...(opts.headers || {}) };
-  const res = await fetch(API + path, { credentials: 'include', ...opts, headers });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || 'Request failed');
-  return data;
-}
-
-function toast(msg) {
-  const el = document.getElementById('toast') || (() => {
-    const t = document.createElement('div'); t.id = 'toast'; t.className = 'toast';
-    document.body.appendChild(t); return t;
-  })();
-  el.textContent = msg; el.classList.add('show');
-  setTimeout(() => el.classList.remove('show'), 2600);
-}
+const root = document.getElementById("app");
+const toastEl = document.getElementById("toast");
 
 function h(tag, attrs = {}, ...children) {
   const el = document.createElement(tag);
-  Object.entries(attrs).forEach(([k, v]) => {
-    if (k.startsWith('on')) el.addEventListener(k.slice(2).toLowerCase(), v);
-    else if (k === 'className') el.className = v;
-    else if (k === 'style') {
-      if (typeof v === 'string') {
-        v.split(';').filter(Boolean).forEach(s => {
-          const [prop, val] = s.split(':').map(x => x.trim());
-          if (prop) el.style[prop.replace(/-([a-z])/g, (_,c) => c.toUpperCase())] = val;
-        });
-      } else {
-        Object.assign(el.style, v);
-      }
+  Object.entries(attrs || {}).forEach(([key, value]) => {
+    if (value === undefined || value === null || value === false) return;
+    if (key === "className") el.className = value;
+    else if (key === "htmlFor") el.htmlFor = value;
+    else if (key === "checked" || key === "selected" || key === "disabled") el[key] = Boolean(value);
+    else if (key === "value") el.value = value;
+    else if (key.startsWith("on") && typeof value === "function") {
+      el.addEventListener(key.slice(2).toLowerCase(), value);
+    } else {
+      el.setAttribute(key, value);
     }
-    else el.setAttribute(k, v);
   });
-  children.forEach(c => el.append(typeof c === 'string' ? document.createTextNode(c) : c));
+  children.flat(Infinity).forEach((child) => {
+    if (child === undefined || child === null || child === false) return;
+    el.appendChild(child instanceof Node ? child : document.createTextNode(String(child)));
+  });
   return el;
 }
 
-// ── State ──
-let adminUser = null;
-let adminData = null;
+function showToast(message) {
+  toastEl.textContent = message;
+  toastEl.classList.add("show");
+  window.clearTimeout(showToast.timer);
+  showToast.timer = window.setTimeout(() => toastEl.classList.remove("show"), 2600);
+}
 
-// ── Login ──
-function renderLogin(error = '') {
-  const root = document.getElementById('app');
-  root.innerHTML = '';
-  root.appendChild(
-    h('div', { className: 'login-shell' },
-      h('div', { className: 'login-card' },
-        h('h1', {}, 'Zawadi Admin'),
-        h('p', { className: 'sub' }, 'Restricted access — authorized personnel only'),
-        h('label', {}, 'Email'),
-        h('input', { type: 'email', id: 'admin-email', placeholder: 'admin@zawadi.app', value: 'admin@zawadi.app' }),
-        h('label', {}, 'Password'),
-        h('input', { type: 'password', id: 'admin-password', placeholder: 'Enter admin password' }),
-        h('button', { onclick: handleLogin }, 'Sign in to Admin'),
-        error ? h('div', { className: 'error' }, error) : null
+async function apiCall(path, options = {}) {
+  const headers = {
+    "Content-Type": "application/json",
+    ...(options.headers || {})
+  };
+  const response = await fetch(path, {
+    credentials: "include",
+    ...options,
+    headers
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload.error || "Request failed");
+  return payload;
+}
+
+function formatDate(value) {
+  if (!value) return "Not set";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleDateString();
+}
+
+function listText(value) {
+  return Array.isArray(value) ? value.join(", ") : value || "";
+}
+
+function splitList(value) {
+  return String(value || "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function setActive(active) {
+  state.active = active;
+  render();
+}
+
+async function loadDashboard() {
+  state.loading = true;
+  render();
+  try {
+    const [usersData, scholarshipsData] = await Promise.all([
+      apiCall("/api/admin/users"),
+      apiCall("/api/admin/scholarships")
+    ]);
+    state.dashboard = {
+      users: usersData.users || [],
+      plans: usersData.plans || [],
+      scholarships: scholarshipsData.scholarships || [],
+      scholarshipStats: scholarshipsData.stats || {},
+      stats: {
+        totalUsers: (usersData.users || []).length,
+        paidUsers: (usersData.users || []).filter((u) => u.is_paid).length,
+        totalScholarships: (scholarshipsData.scholarships || []).length,
+        verifiedScholarships: (scholarshipsData.scholarships || []).filter((s) => s.verifiedAt).length,
+        unverifiedScholarships: (scholarshipsData.scholarships || []).filter((s) => !s.verifiedAt).length,
+        totalApplications: usersData.stats?.totalApplications || 0,
+        totalDocuments: usersData.stats?.totalDocuments || 0
+      }
+    };
+  } catch (error) {
+    if (error.message.includes("Authentication") || error.message.includes("Admin")) {
+      state.user = null;
+      state.dashboard = null;
+      renderLogin(error.message);
+      return;
+    }
+    showToast(error.message);
+  } finally {
+    state.loading = false;
+    render();
+  }
+}
+
+function renderLogin(error = "") {
+  document.querySelectorAll(".modal-backdrop").forEach((node) => node.remove());
+  root.replaceChildren(
+    h("main", { className: "login-shell" },
+      h("section", { className: "login-card" },
+        h("div", { className: "brand-row" },
+          h("div", { className: "brand-mark" }, "Z"),
+          h("div", {},
+            h("strong", {}, "Techsari Zawadi"),
+            h("span", {}, "Admin Console")
+          )
+        ),
+        h("h1", {}, "Admin sign in"),
+        h("p", {}, "Manage scholarships, users, ingestion, statistics, and system audit findings from one secure console."),
+        h("form", { className: "form-grid", onsubmit: handleLogin },
+          h("label", {}, "Email", h("input", { name: "email", type: "email", autocomplete: "username", value: "admin@zawadi.app", required: true })),
+          h("label", {}, "Password", h("input", { name: "password", type: "password", autocomplete: "current-password", required: true })),
+          h("button", { className: "primary-btn full", type: "submit", disabled: state.loading }, state.loading ? "Signing in..." : "Sign in"),
+          error ? h("div", { className: "error" }, error) : null
+        )
       )
     )
   );
 }
 
-async function handleLogin() {
-  const email = document.getElementById('admin-email').value;
-  const password = document.getElementById('admin-password').value;
+async function handleLogin(event) {
+  event.preventDefault();
+  const form = new FormData(event.currentTarget);
+  state.loading = true;
+  renderLogin();
   try {
-    const data = await apiCall('/api/admin/login', {
-      method: 'POST',
-      body: JSON.stringify({ email, password })
+    const data = await apiCall("/api/admin/login", {
+      method: "POST",
+      body: JSON.stringify({
+        email: form.get("email"),
+        password: form.get("password")
+      })
     });
-    adminUser = data.user;
+    state.user = data.user;
     await loadDashboard();
-  } catch (err) {
-    renderLogin(err.message);
+  } catch (error) {
+    state.loading = false;
+    renderLogin(error.message);
   }
 }
 
-// ── Dashboard ──
-async function loadDashboard() {
-  try {
-    const data = await apiCall('/api/admin/users');
-    adminData = data;
-    renderDashboard();
-  } catch (err) {
-    document.getElementById('app').innerHTML = `<div class="login-shell"><div class="login-card"><h1>Session expired</h1><p class="sub">${err.message}</p><button onclick="renderLogin()">Back to login</button></div></div>`;
-  }
+async function handleLogout() {
+  await apiCall("/api/auth/logout", { method: "POST" }).catch(() => {});
+  state.user = null;
+  state.dashboard = null;
+  renderLogin();
 }
 
-function renderDashboard() {
-  const d = adminData;
-  const users = d.users || [];
-  const plans = d.plans || [];
-  const stats = d.stats || {};
-  const adminClass = adminUser?.role === 'admin' ? 'pill pill-admin' : '';
+function render() {
+  document.querySelectorAll(".modal-backdrop").forEach((node) => node.remove());
+  if (!state.user) {
+    renderLogin();
+    return;
+  }
 
-  const root = document.getElementById('app');
-  root.innerHTML = '';
-  root.appendChild(
-    h('div', { className: 'dash-shell' },
-      // Top bar
-      h('div', { className: 'topbar' },
-        h('div', {},
-          h('div', { className: 'eyebrow' }, 'ADMIN PANEL'),
-          h('h1', {}, 'Zawadi Scholarship Management')
+  root.replaceChildren(
+    h("main", { className: "admin-app" },
+      renderSidebar(),
+      h("section", { className: "admin-main" },
+        renderTopbar(),
+        state.loading && !state.dashboard ? h("section", { className: "empty" }, "Loading admin data...") : renderActiveView()
+      )
+    )
+  );
+
+  if (state.modal) document.body.appendChild(renderModal());
+}
+
+function renderSidebar() {
+  const tabs = [
+    ["overview", "Overview"],
+    ["scholarships", "Scholarships"],
+    ["users", "Users"]
+  ];
+  return h("aside", { className: "sidebar" },
+    h("div", { className: "brand-row" },
+      h("div", { className: "brand-mark" }, "Z"),
+      h("div", {},
+        h("strong", {}, "Zawadi Admin"),
+        h("span", {}, "Management console")
+      )
+    ),
+    h("nav", { className: "side-nav", "aria-label": "Admin sections" },
+      tabs.map(([id, label]) =>
+        h("button", { type: "button", className: state.active === id ? "active" : "", onclick: () => setActive(id) }, label)
+      )
+    ),
+    h("div", { className: "endpoint-box" },
+      h("span", { className: "eyebrow" }, "Signed in"),
+      h("strong", {}, state.user?.name || "Administrator"),
+      h("span", { className: "muted" }, state.user?.email || "Admin session")
+    ),
+    h("button", { className: "quiet-btn full", type: "button", onclick: () => { window.location.href = "/"; } }, "Open website"),
+    h("button", { className: "danger-btn full", type: "button", onclick: handleLogout }, "Sign out")
+  );
+}
+
+function renderTopbar() {
+  const titles = {
+    overview: ["Operations", "Website management"],
+    scholarships: ["Scholarships", "Scholarship management"],
+    users: ["Users", "User management"]
+  };
+  const [title, eyebrow] = titles[state.active] || titles.overview;
+  return h("header", { className: "topbar" },
+    h("div", {},
+      h("span", { className: "eyebrow" }, eyebrow),
+      h("h1", {}, title)
+    ),
+    h("div", { className: "row-actions" },
+      h("button", { className: "quiet-btn", type: "button", onclick: loadDashboard, disabled: state.loading }, state.loading ? "Refreshing..." : "Refresh"),
+      h("button", { className: "primary-btn", type: "button", onclick: () => openScholarshipModal(null) }, "Add scholarship")
+    )
+  );
+}
+
+function renderActiveView() {
+  if (!state.dashboard) return h("section", { className: "empty" }, "No admin data loaded");
+  if (state.active === "scholarships") return renderScholarships();
+  if (state.active === "users") return renderUsers();
+  return renderOverview();
+}
+
+function renderOverview() {
+  const stats = state.dashboard.stats;
+  const scholarships = state.dashboard.scholarships || [];
+  const users = state.dashboard.users || [];
+  return h("div", {},
+    h("section", { className: "metrics" },
+      metricCard("Total scholarships", stats.totalScholarships),
+      metricCard("Published", stats.verifiedScholarships),
+      metricCard("Pending review", stats.unverifiedScholarships),
+      metricCard("Total users", stats.totalUsers),
+      metricCard("Paid users", stats.paidUsers),
+      metricCard("Applications", stats.totalApplications)
+    ),
+    h("section", { className: "panel" },
+      h("div", { className: "panel-head" },
+        h("div", {},
+          h("span", { className: "eyebrow" }, "Needs review"),
+          h("h2", {}, "Unverified scholarships")
         ),
-        h('div', { className: 'topbar-actions' },
-          h('span', { className: 'pill pill-admin', style: 'marginRight:"8px"' }, 'Admin'),
-          h('button', { className: 'btn', onclick: loadDashboard }, '🔄 Refresh'),
-          h('button', { className: 'btn btn-danger', onclick: handleLogout }, 'Sign out')
+        h("button", { className: "quiet-btn", type: "button", onclick: () => setActive("scholarships") }, "Manage all")
+      ),
+      renderRecentScholarships(scholarships.filter((s) => !s.verifiedAt).slice(0, 6))
+    ),
+    h("section", { className: "panel" },
+      h("div", { className: "panel-head" },
+        h("div", {},
+          h("span", { className: "eyebrow" }, "Recently published"),
+          h("h2", {}, "Verified scholarships")
         )
       ),
-      // Metrics
-      h('div', { className: 'metrics' },
-        metricCard('Total Scholarships', stats.totalScholarships || 0),
-        metricCard('Total Users', users.length),
-        metricCard('Applications', stats.totalApplications || 0),
-        metricCard('Documents', stats.totalDocuments || 0)
-      ),
-      // User Management
-      h('div', { className: 'panel' },
-        h('div', { className: 'panel-head' },
-          h('div', {},
-            h('div', { className: 'eyebrow' }, 'USER MANAGEMENT'),
-            h('h2', {}, `All Registered Users (${users.length})`)
-          ),
-          h('button', { className: 'btn', onclick: loadDashboard }, '🔄')
-        ),
-        h('table', {},
-          h('thead', {},
-            h('tr', {},
-              h('th', {}, 'User'), h('th', {}, 'Email'), h('th', {}, 'Country'),
-              h('th', {}, 'Plan'), h('th', {}, 'Paid'), h('th', {}, 'Apps'),
-              h('th', {}, 'Docs'), h('th', {}, 'Joined'), h('th', {}, 'Change Plan')
-            )
-          ),
-          h('tbody', {},
-            ...users.map(u =>
-              h('tr', {},
-                h('td', {},
-                  h('strong', {}, u.name),
-                  u.role === 'admin' ? h('span', { className: 'pill pill-admin', style: 'marginLeft:8px' }, 'Admin') : ''
-                ),
-                h('td', {}, u.email),
-                h('td', {}, u.country),
-                h('td', {}, h('span', { className: u.is_paid ? 'pill pill-paid' : 'pill' }, u.planName)),
-                h('td', {}, u.is_paid ? '✅' : '❌'),
-                h('td', {}, String(u.applicationsCount)),
-                h('td', {}, String(u.documentsCount)),
-                h('td', {}, new Date(u.createdAt).toLocaleDateString()),
-                h('td', {},
-                  h('select', {
-                    className: 'pill-select',
-                    onchange: (e) => updateUserPlan(u.id, e.target.value)
-                  },
-                    ...plans.map(p => {
-                      const opt = h('option', { value: p.id }, p.name);
-                      if (p.id === u.plan) opt.selected = true;
-                      return opt;
-                    })
-                  )
-                )
-              )
-            )
-          )
-        ),
-        !users.length ? h('div', { style: 'textAlign:center;padding:20px;color:var(--muted)' }, 'No users registered yet') : ''
-      )
+      renderRecentScholarships(scholarships.filter((s) => s.verifiedAt).slice(0, 6))
     )
   );
 }
 
 function metricCard(label, value) {
-  return h('div', { className: 'metric' },
-    h('div', { className: 'label' }, label),
-    h('div', { className: 'value' }, String(value))
+  return h("article", { className: "metric" },
+    h("span", {}, label),
+    h("strong", {}, String(value ?? 0))
   );
 }
 
-async function updateUserPlan(userId, planId) {
+function renderCategoryGrid(categories) {
+  if (!categories.length) return h("div", { className: "empty" }, "No categories yet");
+  return h("div", { className: "category-grid" },
+    categories.map((category) =>
+      h("article", { className: "category-card" },
+        h("span", {}, category.name),
+        h("strong", {}, String(category.count)),
+        h("small", {}, `${category.botInjected} bot injected`),
+        h("div", { className: "tag-row" },
+          h("button", {
+            className: "btn",
+            type: "button",
+            onclick: () => {
+              state.scholarshipCategory = category.name;
+              setActive("scholarships");
+            }
+          }, "Open")
+        )
+      )
+    )
+  );
+}
+
+function renderRecentScholarships(rows) {
+  if (!rows.length) return h("div", { className: "empty" }, "No scholarships yet");
+  return h("div", { className: "recent-list" },
+    rows.map((row) =>
+      h("article", { className: "recent-row" },
+        h("div", {},
+          h("strong", {}, row.name),
+          h("span", {}, `${row.source || "Unknown source"} - ${formatDate(row.updatedAt)}`),
+          h("div", { className: "tag-row" }, (row.categories || []).slice(0, 3).map((category) => h("span", { className: "pill green" }, category)))
+        ),
+        row.officialUrl ? h("a", { href: row.officialUrl, target: "_blank", rel: "noreferrer" }, "Official") : h("span", { className: "pill red" }, "No URL")
+      )
+    )
+  );
+}
+
+function renderSources(sources) {
+  if (!sources.length) return h("div", { className: "empty" }, "No sources yet");
+  return h("div", { className: "source-list" },
+    sources.map((source) =>
+      h("article", { className: "source-row" },
+        h("strong", {}, source.source),
+        h("span", { className: "pill" }, String(source.count))
+      )
+    )
+  );
+}
+
+function renderScholarships() {
+  const rows = filteredScholarships();
+  return h("section", { className: "panel" },
+    h("div", { className: "panel-head" },
+      h("div", {},
+        h("span", { className: "eyebrow" }, "Full management"),
+        h("h2", {}, `${rows.length} scholarship${rows.length === 1 ? "" : "s"}`)
+      ),
+      h("div", { className: "row-actions" },
+        h("button", { className: "quiet-btn", type: "button", onclick: () => { state.modal = { type: "bulk" }; render(); } }, "Bulk import"),
+        h("button", { className: "primary-btn", type: "button", onclick: () => openScholarshipModal(null) }, "Add")
+      )
+    ),
+    h("div", { className: "toolbar" },
+      h("label", { className: "search-label" }, "Search",
+        h("input", { value: state.scholarshipSearch, placeholder: "Name, provider, country, field", oninput: (event) => { state.scholarshipSearch = event.target.value; render(); } })
+      ),
+      selectLabel("Category", state.scholarshipCategory, ["All categories", ...state.dashboard.categories.map((item) => item.name)], (value) => { state.scholarshipCategory = value; render(); }),
+      selectLabel("Source", state.scholarshipSource, ["All sources", ...state.dashboard.sources.map((item) => item.source)], (value) => { state.scholarshipSource = value; render(); })
+    ),
+    rows.length ? renderScholarshipTable(rows) : h("div", { className: "empty" }, "No scholarships match those filters")
+  );
+}
+
+function filteredScholarships() {
+  const query = state.scholarshipSearch.trim().toLowerCase();
+  return (state.dashboard.scholarships || []).filter((row) => {
+    const haystack = [
+      row.name,
+      row.provider,
+      row.host,
+      row.source,
+      row.fundingType,
+      row.description,
+      listText(row.countries),
+      listText(row.fields),
+      listText(row.categories)
+    ].join(" ").toLowerCase();
+    if (query && !haystack.includes(query)) return false;
+    if (state.scholarshipCategory !== "All categories" && !(row.categories || []).includes(state.scholarshipCategory)) return false;
+    if (state.scholarshipSource !== "All sources" && row.source !== state.scholarshipSource) return false;
+    return true;
+  });
+}
+
+function renderScholarshipTable(rows) {
+  return h("div", { className: "table-shell" },
+    h("table", {},
+      h("thead", {},
+        h("tr", {},
+          h("th", {}, "Scholarship"),
+          h("th", {}, "Categories"),
+          h("th", {}, "Funding"),
+          h("th", {}, "Deadline"),
+          h("th", {}, "Source"),
+          h("th", {}, "Health"),
+          h("th", {}, "Actions")
+        )
+      ),
+      h("tbody", {},
+        rows.map((row) =>
+          h("tr", {},
+            h("td", {},
+              h("strong", {}, row.name),
+              h("span", {}, `${row.provider || row.host} - ${listText(row.countries)}`),
+              h("small", {}, listText(row.fields))
+            ),
+            h("td", {}, h("div", { className: "tag-row" }, (row.categories || []).map((category) => h("span", { className: "pill green" }, category)))),
+            h("td", {}, h("strong", {}, row.fundingType), h("span", {}, row.amountLabel || "Amount not stated")),
+            h("td", {}, h("span", { className: severityClass(row.deadlineStatus?.tone) }, row.deadlineStatus?.label || row.deadline), h("small", {}, row.deadline)),
+            h("td", {}, h("strong", {}, row.source || "Unknown"), row.isBotInjected ? h("span", { className: "pill gold" }, "Bot") : null),
+            h("td", {},
+              row.verifiedAt ? h("span", { className: "pill green" }, "Verified") : h("span", { className: "pill" }, "Needs review"),
+              row.officialUrl ? h("a", { href: row.officialUrl, target: "_blank", rel: "noreferrer" }, "Official link") : h("small", { className: "muted" }, "Missing official URL")
+            ),
+            h("td", {},
+              h("div", { className: "row-actions" },
+                h("button", { className: "btn", type: "button", onclick: () => openScholarshipModal(row) }, "Edit"),
+                row.verifiedAt
+                  ? h("button", { className: "btn", type: "button", onclick: () => unverifyScholarship(row) }, "Unpublish")
+                  : h("button", { className: "primary-btn", type: "button", onclick: () => verifyScholarship(row) }, "Publish"),
+                h("button", { className: "danger-btn", type: "button", onclick: () => deleteScholarship(row) }, "Delete")
+              )
+            )
+          )
+        )
+      )
+    )
+  );
+}
+
+function severityClass(tone) {
+  if (tone === "expired" || tone === "urgent") return "pill red";
+  if (tone === "soon") return "pill gold";
+  return "pill";
+}
+
+function renderUsers() {
+  const query = state.userSearch.trim().toLowerCase();
+  const users = (state.dashboard.users || []).filter((user) =>
+    [user.name, user.email, user.country, user.planName, user.role].join(" ").toLowerCase().includes(query)
+  );
+  return h("section", { className: "panel" },
+    h("div", { className: "panel-head" },
+      h("div", {},
+        h("span", { className: "eyebrow" }, "Accounts"),
+        h("h2", {}, `${users.length} user${users.length === 1 ? "" : "s"}`)
+      )
+    ),
+    h("div", { className: "toolbar" },
+      h("label", { className: "search-label" }, "Search users",
+        h("input", { value: state.userSearch, placeholder: "Name, email, country, plan", oninput: (event) => { state.userSearch = event.target.value; render(); } })
+      )
+    ),
+    users.length ? renderUserTable(users) : h("div", { className: "empty" }, "No users match that search")
+  );
+}
+
+function renderUserTable(users) {
+  return h("div", { className: "table-shell" },
+    h("table", {},
+      h("thead", {},
+        h("tr", {},
+          h("th", {}, "User"),
+          h("th", {}, "Plan"),
+          h("th", {}, "Usage"),
+          h("th", {}, "Joined"),
+          h("th", {}, "Role"),
+          h("th", {}, "Actions")
+        )
+      ),
+      h("tbody", {},
+        users.map((user) =>
+          h("tr", {},
+            h("td", {}, h("strong", {}, user.name || "Unnamed user"), h("span", {}, user.email), h("small", {}, user.country)),
+            h("td", {},
+              selectInline(user.plan, state.dashboard.plans.map((plan) => [plan.id, plan.name]), (value) => updateUser(user.id, { plan: value, is_paid: value !== "free" })),
+              h("span", { className: user.is_paid ? "pill green" : "pill" }, user.is_paid ? "Paid" : "Free")
+            ),
+            h("td", {}, h("strong", {}, `${user.applicationsCount} applications`), h("span", {}, `${user.documentsCount} documents`), h("small", {}, `${user.sessionsCount} sessions`)),
+            h("td", {}, formatDate(user.createdAt)),
+            h("td", {}, h("span", { className: user.role === "admin" ? "pill gold" : "pill" }, user.role)),
+            h("td", {},
+              h("div", { className: "row-actions" },
+                h("button", { className: "btn", type: "button", onclick: () => openUserModal(user) }, "Edit"),
+                h("button", { className: "danger-btn", type: "button", onclick: () => deleteUser(user) }, "Delete")
+              )
+            )
+          )
+        )
+      )
+    )
+  );
+}
+
+function renderSubscriptions() {
+  const stats = state.dashboard.subscriptionStats || {};
+  const query = state.subscriptionSearch.trim().toLowerCase();
+  const subscriptions = (state.dashboard.subscriptions || []).filter((sub) =>
+    [sub.name, sub.email, sub.country, sub.planName, sub.planStatus, sub.subscriptionReference]
+      .join(" ")
+      .toLowerCase()
+      .includes(query)
+  );
+
+  return h("div", {},
+    h("section", { className: "metrics" },
+      metricCard("Subscribers", stats.total || 0),
+      metricCard("Active", stats.active || 0),
+      metricCard("Trials", stats.trial || 0),
+      metricCard("Canceled", stats.canceled || 0),
+      metricCard("MRR KES", stats.monthlyRevenueKes || 0),
+      metricCard("Lifetime KES", stats.lifetimeRevenueKes || 0)
+    ),
+    h("section", { className: "panel" },
+      h("div", { className: "panel-head" },
+        h("div", {},
+          h("span", { className: "eyebrow" }, "Access and billing"),
+          h("h2", {}, `${subscriptions.length} subscription${subscriptions.length === 1 ? "" : "s"}`)
+        )
+      ),
+      h("div", { className: "toolbar" },
+        h("label", { className: "search-label" }, "Search subscriptions",
+          h("input", {
+            value: state.subscriptionSearch,
+            placeholder: "Name, email, plan, status, reference",
+            oninput: (event) => { state.subscriptionSearch = event.target.value; render(); }
+          })
+        )
+      ),
+      subscriptions.length ? renderSubscriptionTable(subscriptions) : h("div", { className: "empty" }, "No subscriptions match that search")
+    )
+  );
+}
+
+function renderSubscriptionTable(subscriptions) {
+  return h("div", { className: "table-shell" },
+    h("table", {},
+      h("thead", {},
+        h("tr", {},
+          h("th", {}, "Subscriber"),
+          h("th", {}, "Plan"),
+          h("th", {}, "Status"),
+          h("th", {}, "Billing"),
+          h("th", {}, "History"),
+          h("th", {}, "Actions")
+        )
+      ),
+      h("tbody", {},
+        subscriptions.map((sub) =>
+          h("tr", {},
+            h("td", {}, h("strong", {}, sub.name || "Unnamed user"), h("span", {}, sub.email), h("small", {}, sub.country)),
+            h("td", {},
+              selectInline(sub.plan, state.dashboard.plans.map((plan) => [plan.id, plan.name]), (value) =>
+                updateSubscription(sub.userId, {
+                  plan: value,
+                  planStatus: value === "free" ? "free" : "active",
+                  is_paid: value !== "free",
+                  action: value === "free" ? "update" : "activate"
+                })
+              ),
+              h("span", { className: sub.is_paid ? "pill green" : "pill" }, sub.is_paid ? "Paid" : "Not paid")
+            ),
+            h("td", {},
+              h("span", { className: subscriptionPillClass(sub.planStatus) }, sub.planStatus),
+              h("small", {}, sub.trialEndsAt ? `Trial ends ${formatDate(sub.trialEndsAt)}` : "")
+            ),
+            h("td", {},
+              h("strong", {}, `${sub.subscriptionCurrency || "KES"} ${sub.subscriptionAmount || 0}`),
+              h("span", {}, sub.subscriptionRenewsAt ? `Renews ${formatDate(sub.subscriptionRenewsAt)}` : "No renewal date"),
+              h("small", {}, sub.subscriptionReference || "No reference")
+            ),
+            h("td", {},
+              h("strong", {}, `${sub.paymentsCount} payment${sub.paymentsCount === 1 ? "" : "s"}`),
+              h("span", {}, `${sub.subscriptionCurrency || "KES"} ${sub.totalSpent || 0} total`),
+              h("small", {}, sub.lastPayment ? `Last: ${formatDate(sub.lastPayment.createdAt)}` : "No payments yet")
+            ),
+            h("td", {},
+              h("div", { className: "row-actions" },
+                h("button", { className: "btn", type: "button", onclick: () => openSubscriptionModal(sub) }, "Edit"),
+                h("button", { className: "btn", type: "button", onclick: () => startTrialForSubscription(sub) }, "Trial"),
+                h("button", { className: "danger-btn", type: "button", onclick: () => cancelSubscriptionForUser(sub) }, "Cancel")
+              )
+            )
+          )
+        )
+      )
+    )
+  );
+}
+
+function subscriptionPillClass(status) {
+  if (status === "active") return "pill green";
+  if (status === "trial") return "pill gold";
+  if (status === "canceled" || status === "expired" || status === "past_due") return "pill red";
+  return "pill";
+}
+
+async function updateSubscription(userId, patch) {
   try {
-    await apiCall(`/api/admin/users/${userId}`, {
-      method: 'PATCH',
-      body: JSON.stringify({ plan: planId, is_paid: planId !== 'free' })
+    await apiCall(`/api/admin/subscriptions/${userId}`, {
+      method: "PATCH",
+      body: JSON.stringify(patch)
     });
-    toast('✅ User plan updated');
+    showToast("Subscription updated");
     await loadDashboard();
-  } catch (err) {
-    toast('❌ ' + err.message);
+  } catch (error) {
+    showToast(error.message);
   }
 }
 
-async function handleLogout() {
-  await apiCall('/api/auth/logout', { method: 'POST' }).catch(() => {});
-  adminUser = null;
-  adminData = null;
-  renderLogin();
+function startTrialForSubscription(sub) {
+  updateSubscription(sub.userId, {
+    plan: "plus",
+    planStatus: "trial",
+    is_paid: false,
+    subscriptionAmount: 0,
+    subscriptionReference: `admin-trial-${Date.now()}`,
+    subscriptionRenewsAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString()
+  });
 }
 
-// ── Init ──
+function cancelSubscriptionForUser(sub) {
+  if (!window.confirm(`Cancel access for ${sub.email}?`)) return;
+  updateSubscription(sub.userId, { action: "cancel", plan: sub.plan });
+}
+
+function renderIngestion() {
+  const ingestion = state.dashboard.ingestion;
+  return h("div", {},
+    h("section", { className: "metrics" },
+      metricCard("Configured", ingestion.configured ? "Yes" : "No"),
+      metricCard("Bot rows", ingestion.botInjected),
+      metricCard("Sources", state.dashboard.sources.length),
+      metricCard("Categories", state.dashboard.categories.length),
+      metricCard("Recent bot rows", ingestion.recent.length)
+    ),
+    h("section", { className: "grid-2" },
+      h("article", { className: "panel" },
+        h("div", { className: "panel-head" },
+          h("div", {},
+            h("span", { className: "eyebrow" }, "Injector endpoint"),
+            h("h2", {}, "Bot scholarship injection")
+          ),
+          h("span", { className: ingestion.configured ? "pill green" : "pill red" }, ingestion.configured ? "Ready" : "Missing key")
+        ),
+        h("div", { className: "endpoint-box" },
+          h("strong", {}, "POST " + ingestion.endpoint),
+          h("span", { className: "muted" }, "Header: Authorization: Bearer <INGEST_API_KEY>"),
+          h("pre", {}, `{
+  "source": "Zawadi Bot",
+  "scholarships": [
+    {
+      "NAME": "Example Scholarship",
+      "HOST": "Example University",
+      "FIELD": "Data Science",
+      "DEGREE": "Masters",
+      "FUNDING": "Fully funded",
+      "DEADLINE": "2026-09-30",
+      "AFRICA_ELIGIBLE": true,
+      "AI_ML_TRACK": true,
+      "CATEGORY": "AI, Data & STEM",
+      "APPLY": "https://example.edu/apply"
+    }
+  ]
+}`)
+        )
+      ),
+      h("article", { className: "panel" },
+        h("div", { className: "panel-head" },
+          h("div", {},
+            h("span", { className: "eyebrow" }, "Recent bot rows"),
+            h("h2", {}, "Injected scholarships")
+          )
+        ),
+        renderRecentScholarships(ingestion.recent)
+      )
+    )
+  );
+}
+
+function renderAudit() {
+  const audit = state.dashboard.audit;
+  return h("div", {},
+    h("section", { className: "metrics" },
+      metricCard("Total issues", audit.summary.total),
+      metricCard("Critical", audit.summary.critical),
+      metricCard("Warnings", audit.summary.warning),
+      metricCard("Info", audit.summary.info),
+      metricCard("Missing links", state.dashboard.stats.missingLinks)
+    ),
+    h("section", { className: "panel" },
+      h("div", { className: "panel-head" },
+        h("div", {},
+          h("span", { className: "eyebrow" }, "Audit findings"),
+          h("h2", {}, "System health")
+        ),
+        h("button", { className: "quiet-btn", type: "button", onclick: loadDashboard }, "Run audit")
+      ),
+      audit.issues.length ? h("div", { className: "issue-list" }, audit.issues.map(renderIssue)) : h("div", { className: "empty" }, "No audit issues found")
+    )
+  );
+}
+
+function renderIssue(issue) {
+  const pillClass = issue.severity === "critical" ? "pill red" : issue.severity === "warning" ? "pill gold" : "pill";
+  return h("article", { className: "issue-card" },
+    h("div", { className: "issue-top" },
+      h("div", {},
+        h("span", { className: "eyebrow" }, issue.area),
+        h("strong", {}, issue.title)
+      ),
+      h("span", { className: pillClass }, issue.severity)
+    ),
+    h("p", {}, issue.detail),
+    h("small", { className: "muted" }, issue.action)
+  );
+}
+
+function selectLabel(label, value, options, onChange) {
+  return h("label", {}, label, selectInline(value, options.map((option) => [option, option]), onChange));
+}
+
+function selectInline(value, options, onChange) {
+  const select = h("select", { onchange: (event) => onChange(event.target.value) },
+    options.map(([optionValue, label]) => h("option", { value: optionValue, selected: optionValue === value }, label))
+  );
+  select.value = value;
+  return select;
+}
+
+function openScholarshipModal(row) {
+  state.modal = { type: "scholarship", row };
+  render();
+}
+
+function openUserModal(user) {
+  state.modal = { type: "user", user };
+  render();
+}
+
+function openSubscriptionModal(subscription) {
+  state.modal = { type: "subscription", subscription };
+  render();
+}
+
+function closeModal() {
+  state.modal = null;
+  render();
+}
+
+function renderModal() {
+  if (state.modal.type === "scholarship") return renderScholarshipModal(state.modal.row);
+  if (state.modal.type === "user") return renderUserModal(state.modal.user);
+  if (state.modal.type === "subscription") return renderSubscriptionModal(state.modal.subscription);
+  if (state.modal.type === "bulk") return renderBulkModal();
+  return h("div");
+}
+
+function renderScholarshipModal(row) {
+  const current = row || {};
+  return h("div", { className: "modal-backdrop", onclick: (event) => { if (event.target.className === "modal-backdrop") closeModal(); } },
+    h("section", { className: "modal", role: "dialog", "aria-modal": "true" },
+      h("header", { className: "modal-header" },
+        h("h2", {}, row ? "Edit scholarship" : "Add scholarship"),
+        h("button", { className: "quiet-btn", type: "button", onclick: closeModal }, "Close")
+      ),
+      h("form", { onsubmit: (event) => saveScholarship(event, row) },
+        h("div", { className: "editor-grid" },
+          field("Name", "name", current.name, true),
+          field("Provider", "provider", current.provider),
+          field("Host", "host", current.host),
+          field("Study countries", "countries", listText(current.countries)),
+          field("Eligible countries", "eligibleCountries", listText(current.eligibleCountries)),
+          field("Eligible regions", "eligibleRegions", listText(current.eligibleRegions || ["Africa"])),
+          field("Degree levels", "degreeLevels", listText(current.degreeLevels)),
+          field("Fields", "fields", listText(current.fields)),
+          field("Schools", "schools", listText(current.schools)),
+          field("Categories", "categories", listText(current.categories)),
+          field("Scholarship type", "scholarshipType", current.scholarshipType || "Scholarship"),
+          field("Funding type", "fundingType", current.fundingType || "Verify funding"),
+          field("Amount", "amountLabel", current.amountLabel),
+          field("Deadline text", "deadline", current.deadline || "Check portal"),
+          field("Deadline date", "deadlineDate", current.deadlineDate, false, "date"),
+          field("Official URL", "officialUrl", current.officialUrl),
+          field("Source", "source", current.source || "Admin console"),
+          field("Required documents", "requiredDocuments", listText(current.requiredDocuments)),
+          field("Accessibility", "accessibility", listText(current.accessibility)),
+          h("label", { className: "wide" }, "Description", h("textarea", { name: "description" }, current.description || ""))
+        ),
+        h("div", { className: "modal-actions" },
+          h("button", { className: "quiet-btn", type: "button", onclick: closeModal }, "Cancel"),
+          h("button", { className: "primary-btn", type: "submit" }, "Save scholarship")
+        )
+      )
+    )
+  );
+}
+
+function field(label, name, value = "", required = false, type = "text") {
+  return h("label", {}, label, h("input", { name, type, value: value || "", required }));
+}
+
+async function saveScholarship(event, row) {
+  event.preventDefault();
+  const form = new FormData(event.currentTarget);
+  const payload = {
+    name: form.get("name"),
+    provider: form.get("provider"),
+    host: form.get("host"),
+    countries: splitList(form.get("countries")),
+    eligibleCountries: splitList(form.get("eligibleCountries")),
+    eligibleRegions: splitList(form.get("eligibleRegions")),
+    degreeLevels: splitList(form.get("degreeLevels")),
+    fields: splitList(form.get("fields")),
+    schools: splitList(form.get("schools")),
+    categories: splitList(form.get("categories")),
+    scholarshipType: form.get("scholarshipType"),
+    fundingType: form.get("fundingType"),
+    amountLabel: form.get("amountLabel"),
+    deadline: form.get("deadline"),
+    deadlineDate: form.get("deadlineDate"),
+    officialUrl: form.get("officialUrl"),
+    source: form.get("source"),
+    requiredDocuments: splitList(form.get("requiredDocuments")),
+    accessibility: splitList(form.get("accessibility")),
+    description: form.get("description")
+  };
+  try {
+    const path = row ? `/api/admin/scholarships/${row.id}` : "/api/admin/scholarships";
+    await apiCall(path, {
+      method: row ? "PATCH" : "POST",
+      body: JSON.stringify(payload)
+    });
+    showToast(row ? "Scholarship updated" : "Scholarship added");
+    closeModal();
+    await loadDashboard();
+  } catch (error) {
+    showToast(error.message);
+  }
+}
+
+async function verifyScholarship(row) {
+  try {
+    await apiCall(`/api/admin/scholarships/${row.id}/verify`, { method: "POST" });
+    showToast("Scholarship published — users can now see it");
+    await loadDashboard();
+  } catch (error) {
+    showToast(error.message);
+  }
+}
+
+async function unverifyScholarship(row) {
+  if (!window.confirm(`Unpublish "${row.name}"? It will be hidden from users until you publish it again.`)) return;
+  try {
+    await apiCall(`/api/admin/scholarships/${row.id}/unverify`, { method: "POST" });
+    showToast("Scholarship unpublished");
+    await loadDashboard();
+  } catch (error) {
+    showToast(error.message);
+  }
+}
+
+async function deleteScholarship(row) {
+  if (!window.confirm(`Delete "${row.name}" and related application records?`)) return;
+  try {
+    await apiCall(`/api/admin/scholarships/${row.id}`, { method: "DELETE" });
+    showToast("Scholarship deleted");
+    await loadDashboard();
+  } catch (error) {
+    showToast(error.message);
+  }
+}
+
+function renderBulkModal() {
+  return h("div", { className: "modal-backdrop", onclick: (event) => { if (event.target.className === "modal-backdrop") closeModal(); } },
+    h("section", { className: "modal", role: "dialog", "aria-modal": "true" },
+      h("header", { className: "modal-header" },
+        h("h2", {}, "Bulk import scholarships"),
+        h("button", { className: "quiet-btn", type: "button", onclick: closeModal }, "Close")
+      ),
+      h("form", { onsubmit: saveBulkImport },
+        h("label", {}, "JSON array or CSV",
+          h("textarea", { name: "raw", required: true }, `[
+  {
+    "name": "Example Africa Masters Scholarship",
+    "provider": "Example Foundation",
+    "host": "Partner universities",
+    "countries": ["Germany", "South Africa"],
+    "degreeLevels": ["Masters"],
+    "fields": ["Data Science"],
+    "fundingType": "Fully funded",
+    "categories": ["Africa eligible", "Fully funded", "AI, Data & STEM"],
+    "deadline": "2026-09-30",
+    "officialUrl": "https://example.edu/scholarship"
+  }
+]`)
+        ),
+        h("div", { className: "modal-actions" },
+          h("button", { className: "quiet-btn", type: "button", onclick: closeModal }, "Cancel"),
+          h("button", { className: "primary-btn", type: "submit" }, "Import")
+        )
+      )
+    )
+  );
+}
+
+async function saveBulkImport(event) {
+  event.preventDefault();
+  const raw = new FormData(event.currentTarget).get("raw");
+  try {
+    const scholarships = parseImport(raw);
+    const result = await apiCall("/api/admin/scholarships/bulk", {
+      method: "POST",
+      body: JSON.stringify({ source: "Admin bulk import", scholarships })
+    });
+    showToast(`${result.added || 0} added, ${result.skipped || 0} skipped`);
+    closeModal();
+    await loadDashboard();
+  } catch (error) {
+    showToast(error.message);
+  }
+}
+
+function parseImport(raw) {
+  const text = String(raw || "").trim();
+  if (!text) throw new Error("Nothing to import");
+  if (text.startsWith("[") || text.startsWith("{")) {
+    const parsed = JSON.parse(text);
+    const rows = Array.isArray(parsed) ? parsed : parsed.scholarships;
+    if (!Array.isArray(rows)) throw new Error("JSON must be an array or { scholarships: [...] }");
+    return rows;
+  }
+  const lines = text.split(/\r?\n/).filter(Boolean);
+  if (lines.length < 2) throw new Error("CSV needs a header and at least one row");
+  const headers = lines[0].split(",").map((header) => header.trim());
+  return lines.slice(1).map((line) => {
+    const cells = line.split(",").map((cell) => cell.trim());
+    return headers.reduce((row, header, index) => {
+      row[header] = cells[index] || "";
+      return row;
+    }, {});
+  });
+}
+
+function renderUserModal(user) {
+  return h("div", { className: "modal-backdrop", onclick: (event) => { if (event.target.className === "modal-backdrop") closeModal(); } },
+    h("section", { className: "modal small", role: "dialog", "aria-modal": "true" },
+      h("header", { className: "modal-header" },
+        h("h2", {}, "Edit user"),
+        h("button", { className: "quiet-btn", type: "button", onclick: closeModal }, "Close")
+      ),
+      h("form", { className: "form-grid", onsubmit: (event) => saveUser(event, user) },
+        field("Name", "name", user.name, true),
+        field("Email", "email", user.email, true, "email"),
+        field("Country", "country", user.country, true),
+        h("label", {}, "Plan", selectInline(user.plan, state.dashboard.plans.map((plan) => [plan.id, plan.name]), () => {})),
+        h("label", {}, "Plan status", selectInline(user.planStatus || "free", [["free", "free"], ["trial", "trial"], ["active", "active"], ["past_due", "past_due"], ["canceled", "canceled"], ["expired", "expired"]], () => {})),
+        h("label", {}, "Role", selectInline(user.role || "user", [["user", "user"], ["admin", "admin"]], () => {})),
+        h("label", {}, h("input", { name: "is_paid", type: "checkbox", checked: user.is_paid }), " Paid account"),
+        h("div", { className: "modal-actions" },
+          h("button", { className: "quiet-btn", type: "button", onclick: closeModal }, "Cancel"),
+          h("button", { className: "primary-btn", type: "submit" }, "Save user")
+        )
+      )
+    )
+  );
+}
+
+async function saveUser(event, user) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const selects = form.querySelectorAll("select");
+  const payload = {
+    name: form.elements.name.value,
+    email: form.elements.email.value,
+    country: form.elements.country.value,
+    plan: selects[0].value,
+    planStatus: selects[1].value,
+    role: selects[2].value,
+    is_paid: form.elements.is_paid.checked
+  };
+  try {
+    await updateUser(user.id, payload, false);
+    showToast("User updated");
+    closeModal();
+    await loadDashboard();
+  } catch (error) {
+    showToast(error.message);
+  }
+}
+
+async function updateUser(userId, patch, reload = true) {
+  await apiCall(`/api/admin/users/${userId}`, {
+    method: "PATCH",
+    body: JSON.stringify(patch)
+  });
+  if (reload) {
+    showToast("User updated");
+    await loadDashboard();
+  }
+}
+
+async function deleteUser(user) {
+  if (!window.confirm(`Delete "${user.email}" and all related local records?`)) return;
+  try {
+    await apiCall(`/api/admin/users/${user.id}`, { method: "DELETE" });
+    showToast("User deleted");
+    await loadDashboard();
+  } catch (error) {
+    showToast(error.message);
+  }
+}
+
+function renderSubscriptionModal(subscription) {
+  return h("div", { className: "modal-backdrop", onclick: (event) => { if (event.target.className === "modal-backdrop") closeModal(); } },
+    h("section", { className: "modal small", role: "dialog", "aria-modal": "true" },
+      h("header", { className: "modal-header" },
+        h("h2", {}, "Edit subscription"),
+        h("button", { className: "quiet-btn", type: "button", onclick: closeModal }, "Close")
+      ),
+      h("form", { className: "form-grid", onsubmit: (event) => saveSubscription(event, subscription) },
+        h("div", {},
+          h("strong", {}, subscription.name || "Subscriber"),
+          h("span", { className: "muted" }, subscription.email)
+        ),
+        h("label", {}, "Plan", selectInline(subscription.plan, state.dashboard.plans.map((plan) => [plan.id, plan.name]), () => {})),
+        h("label", {}, "Status", selectInline(subscription.planStatus || "free", [["free", "free"], ["trial", "trial"], ["active", "active"], ["past_due", "past_due"], ["canceled", "canceled"], ["expired", "expired"]], () => {})),
+        h("label", {}, "Subscription amount", h("input", { name: "subscriptionAmount", type: "number", min: "0", value: subscription.subscriptionAmount || 0 })),
+        h("label", {}, "Currency", h("input", { name: "subscriptionCurrency", value: subscription.subscriptionCurrency || "KES" })),
+        h("label", {}, "Reference", h("input", { name: "subscriptionReference", value: subscription.subscriptionReference || `admin-${Date.now()}` })),
+        h("label", {}, "Renewal date", h("input", { name: "subscriptionRenewsAt", type: "datetime-local", value: toDateTimeLocal(subscription.subscriptionRenewsAt) })),
+        h("label", {}, h("input", { name: "is_paid", type: "checkbox", checked: subscription.is_paid }), " Paid subscription"),
+        h("div", { className: "modal-actions" },
+          h("button", { className: "quiet-btn", type: "button", onclick: closeModal }, "Cancel"),
+          h("button", { className: "primary-btn", type: "submit" }, "Save subscription")
+        )
+      )
+    )
+  );
+}
+
+function toDateTimeLocal(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const offset = date.getTimezoneOffset() * 60000;
+  return new Date(date.getTime() - offset).toISOString().slice(0, 16);
+}
+
+async function saveSubscription(event, subscription) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const selects = form.querySelectorAll("select");
+  const renewal = form.elements.subscriptionRenewsAt.value
+    ? new Date(form.elements.subscriptionRenewsAt.value).toISOString()
+    : "";
+  await updateSubscription(subscription.userId, {
+    plan: selects[0].value,
+    planStatus: selects[1].value,
+    is_paid: form.elements.is_paid.checked,
+    subscriptionAmount: Number(form.elements.subscriptionAmount.value || 0),
+    subscriptionCurrency: form.elements.subscriptionCurrency.value || "KES",
+    subscriptionReference: form.elements.subscriptionReference.value,
+    subscriptionRenewsAt: renewal,
+    action: form.elements.is_paid.checked ? "activate" : "update"
+  });
+  closeModal();
+}
+
 async function init() {
   try {
-    const data = await apiCall('/api/admin/check');
-    if (data.isAdmin) {
-      adminUser = { role: 'admin', plan: 'mentor', planName: 'Mentor Review', country: 'Kenya', name: 'Administrator' };
+    const check = await apiCall("/api/admin/check");
+    if (check.isAdmin) {
+      state.user = { name: "Administrator", role: "admin" };
       await loadDashboard();
       return;
     }
-  } catch (e) {}
+  } catch {
+    state.user = null;
+  }
   renderLogin();
 }
 

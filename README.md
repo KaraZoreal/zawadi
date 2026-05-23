@@ -11,6 +11,10 @@ npm run dev
 
 Open `http://localhost:5173`.
 
+Admin console: `http://localhost:5173/admin`
+
+Set `ADMIN_EMAIL`, `ADMIN_PASSWORD_HASH`, and `INGEST_API_KEY` in `.env` before production. In local development, the fallback admin login is `admin@zawadi.app` with password `zawadi-admin-2026`.
+
 ## 🧠 AI Features
 
 ### 1. Document Intelligence
@@ -30,7 +34,8 @@ Open `http://localhost:5173`.
 - **Stage 1**: Generates first draft from your writing samples (learns your voice)
 - **Stage 2**: AI critiques the draft, identifies weaknesses, rewrites with improvements
 - **Stage 3**: Final polish — grammar, flow, authenticity check
-- **Requires writing samples** before generation (never uses templates)
+- **Requires uploaded essay documents** before generation (PDF or DOCX)
+- Extracts the full readable text server-side, stores the original document metadata, and registers the extracted essay as a writing sample
 - Every essay is uniquely personalized — no two users get the same content
 - Supports all essay types: Personal Statement, SOP, Motivation Letter, Leadership Essay, Study Plan
 
@@ -97,6 +102,11 @@ client/src/
 
 | Route | Description |
 |---|---|
+| `GET /api/admin/dashboard` | Admin statistics, categories, ingestion status, users, scholarships and audit summary |
+| `POST /api/admin/scholarships` | Admin-only scholarship creation |
+| `PATCH /api/admin/scholarships/:id` | Admin-only scholarship updates |
+| `DELETE /api/admin/scholarships/:id` | Admin-only scholarship deletion |
+| `POST /api/scholarships/ingest` | Bot ingestion endpoint protected by `INGEST_API_KEY` |
 | `POST /api/documents/analyze` | Analyze a single document |
 | `POST /api/documents/analyze-batch` | Batch analyze all user documents |
 | `GET /api/documents/gap/:id` | Document gap analysis per scholarship |
@@ -120,3 +130,12 @@ Copy `.env.example` to `.env`, fill in Supabase, Paystack, and DeepSeek credenti
 npm run build
 npm start
 ```
+
+## ✅ Verification
+
+```bash
+npm run build
+$env:SMOKE_BASE_URL="http://localhost:5174"; npm run smoke:test
+```
+
+The smoke test covers admin login, subscription management, DOCX/PDF essay extraction, essay-document storage, rejection of unsupported text uploads, and rejection of non-essay documents.

@@ -477,6 +477,8 @@ function Portal({
   const [editing, setEditing] = React.useState(null);
   const [upgradeOpen, setUpgradeOpen] = React.useState(false);
   const [upgradePlans, setUpgradePlans] = React.useState([]);
+  const [selectedCategory, setSelectedCategory] = React.useState("All categories");
+  const canManageScholarships = user?.role === "admin";
 
   // Load upgrade plans on mount
   React.useEffect(() => {
@@ -526,10 +528,18 @@ function Portal({
           {navButton("intelligence", "Doc Intel", FileCheck2)}
           {navButton("documents", "Documents", FileText)}
           {navButton("pricing", "Pricing", CreditCard)}
-          <button type="button" onClick={() => setUploadOpen(true)}>
-            <FileUp size={18} />
-            Intake
-          </button>
+          {canManageScholarships && (
+            <button type="button" onClick={() => setUploadOpen(true)}>
+              <FileUp size={18} />
+              Intake
+            </button>
+          )}
+          {canManageScholarships && (
+            <button type="button" onClick={() => { window.location.href = "/admin"; }}>
+              <ShieldCheck size={18} />
+              Admin
+            </button>
+          )}
         </nav>
         <div className="gate-panel">
           <div className="gate-title">
@@ -571,14 +581,18 @@ function Portal({
               <Database size={17} />
               Sync
             </button>
-            <button className="secondary-btn" type="button" onClick={() => setEditing({})}>
-              <Plus size={17} />
-              Add
-            </button>
-            <button className="primary-btn" type="button" onClick={() => setUploadOpen(true)}>
-              <Upload size={17} />
-              Upload
-            </button>
+            {canManageScholarships && (
+              <>
+                <button className="secondary-btn" type="button" onClick={() => setEditing({})}>
+                  <Plus size={17} />
+                  Add
+                </button>
+                <button className="primary-btn" type="button" onClick={() => setUploadOpen(true)}>
+                  <Upload size={17} />
+                  Upload
+                </button>
+              </>
+            )}
           </div>
         </header>
 
@@ -589,6 +603,10 @@ function Portal({
             stats={stats}
             documents={documents}
             onUserChanged={onUserChanged}
+            onOpenScholarshipCategory={(category) => {
+              setSelectedCategory(category);
+              setView("scholarships");
+            }}
             onViewChange={setView}
             onToast={onToast}
           />
@@ -598,6 +616,8 @@ function Portal({
           <ScholarshipWorkspace
             user={user}
             rows={rows}
+            selectedCategory={selectedCategory}
+            canManageScholarships={canManageScholarships}
             onEdit={setEditing}
             onReplaceRow={onReplaceRow}
             onRowsChanged={onRowsChanged}
@@ -730,9 +750,19 @@ function NotificationButton({ onToast }) {
   );
 }
 
-function DashboardHome({ user, rows, stats, documents, onUserChanged, onViewChange, onToast }) {
+function DashboardHome({
+  user,
+  rows,
+  stats,
+  documents,
+  onUserChanged,
+  onOpenScholarshipCategory,
+  onViewChange,
+  onToast
+}) {
   const topMatches = rows.slice(0, 3);
   const missingDocs = [...new Set(topMatches.flatMap((row) => row.match.missingDocuments))].slice(0, 5);
+  const categoryCards = buildDashboardCategories(rows);
 
   return (
     <>
@@ -741,6 +771,21 @@ function DashboardHome({ user, rows, stats, documents, onUserChanged, onViewChan
         <MetricCard label="Strong matches" value={stats.strongMatches} icon={<Sparkles size={18} />} />
         <MetricCard label="Applied" value={stats.applied} icon={<FileCheck2 size={18} />} />
         <MetricCard label="Urgent" value={stats.urgent} icon={<Clock3 size={18} />} tone="urgent" />
+      </section>
+
+      <section className="category-dashboard" aria-label="Scholarship categories">
+        {categoryCards.map((category) => (
+          <button
+            key={category.name}
+            className="category-card"
+            type="button"
+            onClick={() => onOpenScholarshipCategory(category.name)}
+          >
+            <span>{category.name}</span>
+            <strong>{category.count}</strong>
+            <small>{category.preview}</small>
+          </button>
+        ))}
       </section>
 
       <section className="dashboard-grid">
@@ -797,6 +842,71 @@ function MetricCard({ label, value, icon, tone = "" }) {
       </div>
     </article>
   );
+}
+
+function buildDashboardCategories(rows) {
+  const preferred = [
+    "Africa eligible",
+    "Fully funded",
+    "AI, Data & STEM",
+    "Masters",
+    "PhD & Research",
+    "Urgent deadlines"
+  ];
+  const map = new Map();
+  rows.forEach((row) => {
+    const categories = row.categories?.length ? row.categories : inferClientCategories(row);
+    categories.forEach((category) => {
+      if (!map.has(category)) map.set(category, []);
+      map.get(category).push(row);
+    });
+  });
+
+  return [...map.entries()]
+    .map(([name, categoryRows]) => ({
+      name,
+      count: categoryRows.length,
+      preview: categoryRows
+        .slice(0, 2)
+        .map((row) => row.name)
+        .join(" | ")
+    }))
+    .sort((a, b) => {
+      const ai = preferred.indexOf(a.name);
+      const bi = preferred.indexOf(b.name);
+      if (ai !== -1 || bi !== -1) {
+        return (ai === -1 ? preferred.length : ai) - (bi === -1 ? preferred.length : bi);
+      }
+      return b.count - a.count || a.name.localeCompare(b.name);
+    })
+    .slice(0, 6);
+}
+
+function inferClientCategories(row) {
+  const haystack = [
+    row.name,
+    row.provider,
+    row.host,
+    row.scholarshipType,
+    row.fundingType,
+    row.amountLabel,
+    row.description,
+    ...(row.fields || []),
+    ...(row.degreeLevels || []),
+    ...(row.eligibleRegions || []),
+    ...(row.accessibility || [])
+  ].join(" ").toLowerCase();
+  const categories = [];
+  const add = (label, terms) => {
+    if (terms.some((term) => haystack.includes(term))) categories.push(label);
+  };
+  if (haystack.includes("africa")) categories.push("Africa eligible");
+  add("Fully funded", ["fully funded", "full tuition", "stipend"]);
+  add("AI, Data & STEM", ["artificial intelligence", "machine learning", "data science", "engineering", "stem", "technology"]);
+  add("Masters", ["masters", "master", "msc", "mba"]);
+  add("PhD & Research", ["phd", "doctoral", "doctorate", "research"]);
+  if (row.match?.urgency?.tone === "urgent") categories.push("Urgent deadlines");
+  return [...new Set(categories)].slice(0, 6);
 }
 
 function ProfileCard({ user, onUserChanged, onToast }) {
@@ -880,6 +990,8 @@ function ProfileCard({ user, onUserChanged, onToast }) {
 function ScholarshipWorkspace({
   user,
   rows,
+  selectedCategory,
+  canManageScholarships,
   onEdit,
   onReplaceRow,
   onRowsChanged,
@@ -890,6 +1002,7 @@ function ScholarshipWorkspace({
     country: "All countries",
     applicantCountry: user.profile.country || user.country,
     level: "All levels",
+    category: selectedCategory || "All categories",
     status: "All statuses",
     type: "All types",
     funding: "All funding",
@@ -901,6 +1014,13 @@ function ScholarshipWorkspace({
     amountOnly: false
   });
   const [sortBy, setSortBy] = React.useState("match");
+
+  React.useEffect(() => {
+    setFilters((current) => ({
+      ...current,
+      category: selectedCategory || "All categories"
+    }));
+  }, [selectedCategory]);
 
   const optionData = React.useMemo(() => buildOptionData(rows), [rows]);
   const filteredRows = React.useMemo(
@@ -926,6 +1046,7 @@ function ScholarshipWorkspace({
   }
 
   async function deleteScholarship(row) {
+    if (!canManageScholarships) return;
     if (!window.confirm(`Delete "${row.name}" from the shared portal?`)) return;
     await api(`/api/scholarships/${row.id}`, { method: "DELETE" });
     onRowsChanged(rows.filter((item) => item.id !== row.id));
@@ -939,6 +1060,7 @@ function ScholarshipWorkspace({
       "Countries",
       "Eligible Countries",
       "Degree Levels",
+      "Categories",
       "Schools",
       "Funding",
       "Amount",
@@ -954,6 +1076,7 @@ function ScholarshipWorkspace({
       row.countries.join("; "),
       row.eligibleCountries.join("; "),
       row.degreeLevels.join("; "),
+      (row.categories || []).join("; "),
       row.schools.join("; "),
       row.fundingType,
       row.amountLabel,
@@ -994,6 +1117,11 @@ function ScholarshipWorkspace({
             value={filters.level}
             onChange={(level) => setFilters({ ...filters, level })}
             options={["All levels", ...optionData.levels]}
+          />
+          <FilterSelect
+            value={filters.category}
+            onChange={(category) => setFilters({ ...filters, category })}
+            options={["All categories", ...optionData.categories]}
           />
           <FilterSelect
             value={filters.status}
@@ -1072,6 +1200,7 @@ function ScholarshipWorkspace({
 
       <ScholarshipTable
         rows={filteredRows}
+        canManageScholarships={canManageScholarships}
         onEdit={onEdit}
         onDelete={deleteScholarship}
         onUpdateApplication={updateApplication}
@@ -1100,6 +1229,7 @@ function buildOptionData(rows) {
   return {
     countries: all((row) => row.countries),
     levels: all((row) => row.degreeLevels),
+    categories: all((row) => row.categories?.length ? row.categories : inferClientCategories(row)),
     funding: all((row) => [row.fundingType]),
     types: all((row) => [row.scholarshipType]),
     accessibility: all((row) => row.accessibility)
@@ -1118,6 +1248,7 @@ function filterScholarships(rows, filters, sortBy, paid) {
         row.countries.join(" "),
         row.eligibleCountries.join(" "),
         row.fields.join(" "),
+        (row.categories || []).join(" "),
         row.schools.join(" "),
         row.requiredDocuments.join(" "),
         row.accessibility.join(" "),
@@ -1129,6 +1260,10 @@ function filterScholarships(rows, filters, sortBy, paid) {
       if (query && !haystack.includes(query)) return false;
       if (filters.country !== "All countries" && !row.countries.includes(filters.country)) return false;
       if (filters.level !== "All levels" && !row.degreeLevels.includes(filters.level)) return false;
+      if (filters.category !== "All categories") {
+        const categories = row.categories?.length ? row.categories : inferClientCategories(row);
+        if (!categories.includes(filters.category)) return false;
+      }
       if (filters.status !== "All statuses" && row.application.status !== filters.status) return false;
       if (filters.type !== "All types" && row.scholarshipType !== filters.type) return false;
       if (filters.funding !== "All funding" && row.fundingType !== filters.funding) return false;
@@ -1152,7 +1287,7 @@ function filterScholarships(rows, filters, sortBy, paid) {
     });
 }
 
-function ScholarshipTable({ rows, onEdit, onDelete, onUpdateApplication }) {
+function ScholarshipTable({ rows, canManageScholarships, onEdit, onDelete, onUpdateApplication }) {
   if (!rows.length) {
     return (
       <section className="empty-state">
@@ -1177,7 +1312,7 @@ function ScholarshipTable({ rows, onEdit, onDelete, onUpdateApplication }) {
             <th>Status</th>
             <th>Priority</th>
             <th>Notes</th>
-            <th>Actions</th>
+            {canManageScholarships && <th>Actions</th>}
           </tr>
         </thead>
         <tbody>
@@ -1185,6 +1320,7 @@ function ScholarshipTable({ rows, onEdit, onDelete, onUpdateApplication }) {
             <ScholarshipRow
               key={row.id}
               row={row}
+              canManageScholarships={canManageScholarships}
               onEdit={onEdit}
               onDelete={onDelete}
               onUpdateApplication={onUpdateApplication}
@@ -1196,7 +1332,7 @@ function ScholarshipTable({ rows, onEdit, onDelete, onUpdateApplication }) {
   );
 }
 
-function ScholarshipRow({ row, onEdit, onDelete, onUpdateApplication }) {
+function ScholarshipRow({ row, canManageScholarships, onEdit, onDelete, onUpdateApplication }) {
   const statusClass = row.application.status.toLowerCase().replace(/\s+/g, "-");
 
   return (
@@ -1293,14 +1429,18 @@ function ScholarshipRow({ row, onEdit, onDelete, onUpdateApplication }) {
           placeholder="Next step"
         />
       </td>
-      <td className="actions-col">
-        <button className="icon-btn" type="button" onClick={() => onEdit(row)} title="Edit scholarship" aria-label="Edit scholarship">
-          <Pencil size={16} />
-        </button>
-        <button className="icon-btn danger" type="button" onClick={() => onDelete(row)} title="Delete scholarship" aria-label="Delete scholarship">
-          <Trash2 size={16} />
-        </button>
-      </td>
+      {canManageScholarships && (
+        <td className="actions-col">
+          <>
+            <button className="icon-btn" type="button" onClick={() => onEdit(row)} title="Edit scholarship" aria-label="Edit scholarship">
+              <Pencil size={16} />
+            </button>
+            <button className="icon-btn danger" type="button" onClick={() => onDelete(row)} title="Delete scholarship" aria-label="Delete scholarship">
+              <Trash2 size={16} />
+            </button>
+          </>
+        </td>
+      )}
     </tr>
   );
 }
@@ -1630,7 +1770,8 @@ function ScholarshipEditor({ row, onClose, onSaved }) {
       requiredDocuments: ["CV", "Transcript", "Motivation Letter", "References"],
       officialUrl: "",
       description: "",
-      tags: []
+      tags: [],
+      categories: []
     }
   );
   const [saving, setSaving] = React.useState(false);
@@ -1671,6 +1812,7 @@ function ScholarshipEditor({ row, onClose, onSaved }) {
         <label>Schools<input value={asText(form.schools)} onChange={(event) => update("schools", toList(event.target.value))} /></label>
         <label>Scholarship type<input value={form.scholarshipType} onChange={(event) => update("scholarshipType", event.target.value)} /></label>
         <label>Funding type<input value={form.fundingType} onChange={(event) => update("fundingType", event.target.value)} /></label>
+        <label>Dashboard categories<input value={asText(form.categories)} onChange={(event) => update("categories", toList(event.target.value))} /></label>
         <label>Amount shown<input value={form.amountLabel} onChange={(event) => update("amountLabel", event.target.value)} /></label>
         <label>Deadline<input value={form.deadline} onChange={(event) => update("deadline", event.target.value)} /></label>
         <label>Deadline date<input type="date" value={form.deadlineDate} onChange={(event) => update("deadlineDate", event.target.value)} /></label>
@@ -1755,6 +1897,8 @@ function parseZawadiBlocks(text) {
     "REQUIRED DOCUMENTS": "requiredDocuments",
     DOCUMENTS: "requiredDocuments",
     ACCESSIBILITY: "accessibility",
+    CATEGORY: "categories",
+    CATEGORIES: "categories",
     APPLY: "officialUrl",
     URL: "officialUrl"
   };
@@ -1849,7 +1993,8 @@ function normalizeParsedRow(row) {
     requiredDocuments: toList(pick("requiredDocuments", "requireddocuments", "documents") || "CV, Transcript, Motivation Letter, References"),
     officialUrl: pick("officialUrl", "officialurl", "apply", "url"),
     description: pick("description"),
-    tags: toList(pick("tags"))
+    tags: toList(pick("tags")),
+    categories: toList(pick("categories", "category"))
   };
 }
 

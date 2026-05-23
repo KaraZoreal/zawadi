@@ -259,7 +259,7 @@ function seedScholarships() {
       tags: ["masters", "global", "fully funded"],
       createdAt,
       updatedAt: createdAt,
-      verifiedAt: "",
+      verifiedAt: createdAt,
       createdBy: "system"
     },
     {
@@ -290,7 +290,7 @@ function seedScholarships() {
       tags: ["germany", "masters", "development"],
       createdAt,
       updatedAt: createdAt,
-      verifiedAt: "",
+      verifiedAt: createdAt,
       createdBy: "system"
     },
     {
@@ -321,7 +321,7 @@ function seedScholarships() {
       tags: ["africa", "undergraduate", "masters"],
       createdAt,
       updatedAt: createdAt,
-      verifiedAt: "",
+      verifiedAt: createdAt,
       createdBy: "system"
     },
     {
@@ -352,7 +352,7 @@ function seedScholarships() {
       tags: ["uk", "masters", "leadership"],
       createdAt,
       updatedAt: createdAt,
-      verifiedAt: "",
+      verifiedAt: createdAt,
       createdBy: "system"
     },
     {
@@ -383,7 +383,7 @@ function seedScholarships() {
       tags: ["africa", "south africa", "leadership"],
       createdAt,
       updatedAt: createdAt,
-      verifiedAt: "",
+      verifiedAt: createdAt,
       createdBy: "system"
     },
     {
@@ -421,7 +421,7 @@ function seedScholarships() {
       tags: ["postgraduate", "need based", "selected countries"],
       createdAt,
       updatedAt: createdAt,
-      verifiedAt: "",
+      verifiedAt: createdAt,
       createdBy: "system"
     }
   ];
@@ -482,8 +482,13 @@ async function loadDb() {
     const existingScholarshipIds = new Set(db.scholarships.map((row) => row.id));
     let addedSeeds = false;
     seedScholarships().forEach((row) => {
-      if (!existingScholarshipIds.has(row.id)) {
+      const existing = db.scholarships.find((s) => s.id === row.id);
+      if (!existing) {
         db.scholarships.push(row);
+        addedSeeds = true;
+      } else if (!existing.verifiedAt) {
+        // Backfill verifiedAt on existing seed scholarships that predate this release
+        existing.verifiedAt = row.verifiedAt || nowIso();
         addedSeeds = true;
       }
     });
@@ -1238,7 +1243,12 @@ app.patch("/api/profile", requireAuth, async (req, res, next) => {
 app.use("/api/scholarships", scholarshipIngestionRouter);
 
 app.get("/api/scholarships", requireAuth, (req, res) => {
-  const rows = req.db.scholarships
+  // Admins see all scholarships; regular users only see verified (published) ones
+  const visibleScholarships = isAdmin(req)
+    ? req.db.scholarships
+    : req.db.scholarships.filter((s) => s.verifiedAt);
+
+  const rows = visibleScholarships
     .map((row) => scholarshipWithApplication(req.db, req.user, row))
     .sort((a, b) => b.match.score - a.match.score || new Date(b.updatedAt) - new Date(a.updatedAt));
 
@@ -2418,6 +2428,141 @@ app.patch("/api/admin/users/:id", requireAuth, requireAdmin, async (req, res, ne
 // Admin check — returns admin status
 app.get("/api/admin/check", requireAuth, (req, res) => {
   res.json({ isAdmin: isAdmin(req) });
+});
+
+// Get all scholarships (admin view — includes unverified)
+app.get("/api/admin/scholarships", requireAuth, requireAdmin, (req, res) => {
+  const scholarships = req.db.scholarships.map((s) => ({
+    ...s,
+    isBotInjected: Boolean(s.source?.toLowerCase().includes("bot") || s.createdBy?.toLowerCase().includes("bot"))
+  }));
+  res.json({
+    scholarships,
+    stats: {
+      total: scholarships.length,
+      verified: scholarships.filter((s) => s.verifiedAt).length,
+      unverified: scholarships.filter((s) => !s.verifiedAt).length,
+      botInjected: scholarships.filter((s) => s.isBotInjected).length
+    }
+  });
+});
+
+// Add a scholarship (admin only)
+app.post("/api/admin/scholarships", requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    const scholarship = sanitizeScholarship(
+      {
+        ...req.body,
+        source: req.body.source || "Admin console",
+        createdBy: req.user.id
+      },
+      req.user.id
+    );
+    req.db.scholarships.unshift(scholarship);
+    req.db.notifications.unshift({
+      id: crypto.randomUUID(),
+      type: "new_scholarship",
+      scholarshipId: scholarship.id,
+      title: scholarship.name,
+      createdAt: nowIso()
+    });
+    await saveDb(req.db);
+    res.status(201).json({ scholarship });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Update a scholarship (admin only)
+app.patch("/api/admin/scholarships/:id", requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    const index = req.db.scholarships.findIndex((row) => row.id === req.params.id);
+    if (index === -1) {
+      res.status(404).json({ error: "Scholarship not found" });
+      return;
+    }
+
+    const updated = {
+      ...sanitizeScholarship({ ...req.db.scholarships[index], ...req.body }, req.user.id),
+      id: req.db.scholarships[index].id,
+      createdAt: req.db.scholarships[index].createdAt,
+      createdBy: req.db.scholarships[index].createdBy,
+      updatedAt: nowIso()
+    };
+
+    // Preserve verifiedAt unless explicitly set in request body
+    if (req.body.verifiedAt !== undefined) {
+      updated.verifiedAt = req.body.verifiedAt;
+    } else {
+      updated.verifiedAt = req.db.scholarships[index].verifiedAt;
+    }
+
+    req.db.scholarships[index] = updated;
+    await saveDb(req.db);
+    res.json({ scholarship: updated });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Verify a scholarship — publishes it to the user-facing website
+app.post("/api/admin/scholarships/:id/verify", requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    const scholarship = req.db.scholarships.find((row) => row.id === req.params.id);
+    if (!scholarship) {
+      res.status(404).json({ error: "Scholarship not found" });
+      return;
+    }
+    scholarship.verifiedAt = nowIso();
+    scholarship.updatedAt = nowIso();
+    // Notify users about this newly published scholarship
+    req.db.notifications.unshift({
+      id: crypto.randomUUID(),
+      type: "scholarship_verified",
+      scholarshipId: scholarship.id,
+      title: scholarship.name,
+      createdAt: nowIso()
+    });
+    await saveDb(req.db);
+    res.json({ ok: true, scholarship });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Unverify a scholarship — removes it from the user-facing website
+app.post("/api/admin/scholarships/:id/unverify", requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    const scholarship = req.db.scholarships.find((row) => row.id === req.params.id);
+    if (!scholarship) {
+      res.status(404).json({ error: "Scholarship not found" });
+      return;
+    }
+    scholarship.verifiedAt = "";
+    scholarship.updatedAt = nowIso();
+    await saveDb(req.db);
+    res.json({ ok: true, scholarship });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Delete a scholarship (admin only)
+app.delete("/api/admin/scholarships/:id", requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    const before = req.db.scholarships.length;
+    req.db.scholarships = req.db.scholarships.filter((row) => row.id !== req.params.id);
+    if (before === req.db.scholarships.length) {
+      res.status(404).json({ error: "Scholarship not found" });
+      return;
+    }
+    req.db.applications = req.db.applications.filter((row) => row.scholarshipId !== req.params.id);
+    req.db.notifications = req.db.notifications.filter((row) => row.scholarshipId !== req.params.id);
+    await saveDb(req.db);
+    res.json({ ok: true });
+  } catch (error) {
+    next(error);
+  }
 });
 
 app.use((error, _req, res, _next) => {
