@@ -17,9 +17,7 @@ export default function ApplicationCenter({ api, rows = [], user, onToast, onRef
   const [loading, setLoading] = React.useState(false);
 
   const isFree = user?.plan === "free" && !user?.is_paid;
-  const trackingLimit = 3;
   const trackedCount = rows.filter((r) => r.application?.status && r.application.status !== "Not started").length;
-  const limitReached = isFree && trackedCount >= trackingLimit;
 
   React.useEffect(() => {
     loadAlerts();
@@ -33,10 +31,6 @@ export default function ApplicationCenter({ api, rows = [], user, onToast, onRef
   }
 
   async function applySingle(scholarshipId) {
-    if (limitReached) {
-      onUpgrade?.();
-      return;
-    }
     setApplying(true);
     try {
       const data = await api(`/api/apply/${scholarshipId}`, { method: "POST" });
@@ -111,7 +105,7 @@ export default function ApplicationCenter({ api, rows = [], user, onToast, onRef
         <div className="free-tier-banner">
           <Lock size={16} />
           <span>
-            Free plan: {trackedCount}/{trackingLimit} applications tracked.{" "}
+            Free plan: unlimited application tracking, with 3 assisted auto-applies per day.{" "}
           </span>
           <button className="ghost-btn" onClick={onUpgrade}>
             Upgrade for unlimited tracking
@@ -172,21 +166,14 @@ export default function ApplicationCenter({ api, rows = [], user, onToast, onRef
         <div className="panel-head">
           <h3>Scholarships</h3>
           <div className="apply-actions">
-            {limitReached ? (
-              <button className="primary-btn" onClick={onUpgrade}>
-                <Lock size={16} />
-                Upgrade to track more
-              </button>
-            ) : (
-              <button
-                className="secondary-btn"
-                onClick={applyBatch}
-                disabled={batchApplying || selectedIds.length === 0}
-              >
-                {batchApplying ? <Loader2 className="spin" size={16} /> : <Zap size={16} />}
-                Auto-Apply ({selectedIds.length})
-              </button>
-            )}
+            <button
+              className="secondary-btn"
+              onClick={applyBatch}
+              disabled={batchApplying || selectedIds.length === 0}
+            >
+              {batchApplying ? <Loader2 className="spin" size={16} /> : <Zap size={16} />}
+              Auto-Apply ({selectedIds.length})
+            </button>
           </div>
         </div>
 
@@ -216,21 +203,14 @@ export default function ApplicationCenter({ api, rows = [], user, onToast, onRef
                 </div>
 
                 <div className="apply-actions">
-                  {limitReached ? (
-                    <button className="secondary-btn" onClick={onUpgrade}>
-                      <Lock size={14} />
-                      Upgrade
-                    </button>
-                  ) : (
-                    <button
-                      className="secondary-btn"
-                      onClick={() => applySingle(row.id)}
-                      disabled={applying}
-                    >
-                      {applying ? <Loader2 size={14} className="spin" /> : <Zap size={14} />}
-                      Auto-Apply
-                    </button>
-                  )}
+                  <button
+                    className="secondary-btn"
+                    onClick={() => applySingle(row.id)}
+                    disabled={applying}
+                  >
+                    {applying ? <Loader2 size={14} className="spin" /> : <Zap size={14} />}
+                    Auto-Apply
+                  </button>
                 </div>
               </div>
             );

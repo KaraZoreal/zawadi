@@ -115,6 +115,7 @@ function App() {
   const [stats, setStats] = React.useState(emptyStats());
   const [toast, setToast] = React.useState("");
   const [showLanding, setShowLanding] = React.useState(true);
+  const [authMode, setAuthMode] = React.useState("login");
 
   React.useEffect(() => {
     bootstrap();
@@ -208,14 +209,21 @@ function App() {
     if (showLanding) {
       return (
         <LandingPage
-          onGetStarted={() => setShowLanding(false)}
-          onLogin={() => setShowLanding(false)}
+          onGetStarted={() => {
+            setAuthMode("register");
+            setShowLanding(false);
+          }}
+          onLogin={() => {
+            setAuthMode("login");
+            setShowLanding(false);
+          }}
         />
       );
     }
     return (
       <AuthScreen
         config={config}
+        initialMode={authMode}
         onAuthed={async (nextUser) => {
           setUser(nextUser);
           await loadScholarships();
@@ -277,8 +285,8 @@ function BootScreen() {
   );
 }
 
-function AuthScreen({ config, onAuthed, onBackToLanding }) {
-  const [mode, setMode] = React.useState("login");
+function AuthScreen({ config, initialMode = "login", onAuthed, onBackToLanding }) {
+  const [mode, setMode] = React.useState(initialMode);
   const [form, setForm] = React.useState({
     name: "",
     email: "",
@@ -287,6 +295,10 @@ function AuthScreen({ config, onAuthed, onBackToLanding }) {
   });
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState("");
+
+  React.useEffect(() => {
+    setMode(initialMode);
+  }, [initialMode]);
 
   async function submit(event) {
     event.preventDefault();
@@ -603,6 +615,7 @@ function Portal({
             stats={stats}
             documents={documents}
             onUserChanged={onUserChanged}
+            onRefresh={onRefresh}
             onOpenScholarshipCategory={(category) => {
               setSelectedCategory(category);
               setView("scholarships");
@@ -756,6 +769,7 @@ function DashboardHome({
   stats,
   documents,
   onUserChanged,
+  onRefresh,
   onOpenScholarshipCategory,
   onViewChange,
   onToast
@@ -789,7 +803,12 @@ function DashboardHome({
       </section>
 
       <section className="dashboard-grid">
-        <ProfileCard user={user} onUserChanged={onUserChanged} onToast={onToast} />
+        <ProfileCard
+          user={user}
+          onUserChanged={onUserChanged}
+          onRefresh={onRefresh}
+          onToast={onToast}
+        />
         <article className="panel">
           <div className="panel-head">
             <div>
@@ -909,9 +928,13 @@ function inferClientCategories(row) {
   return [...new Set(categories)].slice(0, 6);
 }
 
-function ProfileCard({ user, onUserChanged, onToast }) {
+function ProfileCard({ user, onUserChanged, onRefresh, onToast }) {
   const [profile, setProfile] = React.useState(user.profile);
   const [saving, setSaving] = React.useState(false);
+
+  React.useEffect(() => {
+    setProfile(user.profile);
+  }, [user.profile]);
 
   async function saveProfile(event) {
     event.preventDefault();
@@ -922,7 +945,8 @@ function ProfileCard({ user, onUserChanged, onToast }) {
         body: JSON.stringify(profile)
       });
       onUserChanged(data.user);
-      onToast("Profile updated");
+      await onRefresh?.();
+      onToast("Profile updated and matches refreshed");
     } catch (err) {
       onToast(err.message);
     } finally {
@@ -1479,6 +1503,7 @@ function DocumentsWorkspace({ user, documents, rows, onDocumentsChanged, onToast
 
     let storagePath = "";
     let source = "Local metadata";
+    let fileData = "";
 
     try {
       if (supabaseClient) {
@@ -1492,9 +1517,12 @@ function DocumentsWorkspace({ user, documents, rows, onDocumentsChanged, onToast
           });
         if (error) throw error;
         source = "Supabase Storage";
+      } else {
+        fileData = await fileToDataUrl(file);
+        source = "Local secure storage";
       }
 
-      const data = await api("/api/documents", {
+      const response = await api("/api/documents", {
         method: "POST",
         body: JSON.stringify({
           type,
@@ -1503,10 +1531,11 @@ function DocumentsWorkspace({ user, documents, rows, onDocumentsChanged, onToast
           size: file.size,
           mimeType: file.type,
           storagePath,
-          source
+          source,
+          data: fileData
         })
       });
-      onDocumentsChanged([data.document, ...documents]);
+      onDocumentsChanged([response.document, ...documents]);
       onToast("Document uploaded");
     } catch (err) {
       onToast(err.message);
@@ -1591,6 +1620,21 @@ function DocumentsWorkspace({ user, documents, rows, onDocumentsChanged, onToast
           {needed.length ? needed.map((doc) => <span key={doc}>{doc}</span>) : <span>Top matches are document-ready</span>}
         </div>
       </article>
+      <article className="panel security-panel">
+        <div className="panel-head">
+          <div>
+            <span className="eyebrow">Security</span>
+            <h2>Private document vault</h2>
+          </div>
+          <ShieldCheck size={20} color="var(--green)" />
+        </div>
+        <div className="security-list">
+          <span>Account-only access</span>
+          <span>Private storage paths</span>
+          <span>Server-side session cookies</span>
+          <span>Payment verification webhooks</span>
+        </div>
+      </article>
     </section>
   );
 }
@@ -1629,15 +1673,15 @@ function PricingWorkspace({ config, user, onUserChanged, onToast }) {
       </div>
       <div className="pricing-grid">
         {plans.map((plan) => {
-          const price = interval === "annual" ? plan.annualKes : plan.monthlyKes;
+          const price = planDisplayPrice(plan, interval, user.country);
           const isCurrent = user.plan === plan.id;
           return (
             <article key={plan.id} className={`price-card ${plan.id === "plus" ? "featured" : ""}`}>
               <span className="plan-badge">{plan.badge}</span>
               <h3>{plan.name}</h3>
               <p>{plan.description}</p>
-              <strong className="price">{price ? `KES ${price.toLocaleString()}` : "Free"}</strong>
-              <span className="price-note">{price ? `per ${interval === "annual" ? "year" : "month"}` : "forever"}</span>
+              <strong className="price">{price.primary}</strong>
+              <span className="price-note">{price.note}</span>
               <ul>
                 {plan.features.map((feature) => <li key={feature}>{feature}</li>)}
               </ul>
@@ -2008,6 +2052,71 @@ function toList(value) {
 
 function asText(value) {
   return Array.isArray(value) ? value.join(", ") : value || "";
+}
+
+function fileToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(reader.error || new Error("Could not read file"));
+    reader.readAsDataURL(file);
+  });
+}
+
+const countryCurrency = {
+  Kenya: "KES",
+  Nigeria: "NGN",
+  Ghana: "GHS",
+  "South Africa": "ZAR",
+  Uganda: "UGX",
+  Tanzania: "TZS",
+  Rwanda: "RWF",
+  Ethiopia: "ETB",
+  Egypt: "EGP",
+  Morocco: "MAD",
+  "United States": "USD",
+  USA: "USD"
+};
+
+const usdRates = {
+  USD: 1,
+  KES: 130,
+  NGN: 1500,
+  GHS: 15,
+  ZAR: 18,
+  UGX: 3800,
+  TZS: 2600,
+  RWF: 1300,
+  ETB: 57,
+  EGP: 48,
+  MAD: 10
+};
+
+function localCurrencyForCountry(country = "") {
+  return countryCurrency[country] || "USD";
+}
+
+function formatCurrency(amount, currency) {
+  if (!amount) return "Free";
+  if (currency === "USD") return `$${amount.toLocaleString()}`;
+  return `${currency} ${Math.round(amount).toLocaleString()}`;
+}
+
+function planDisplayPrice(plan, interval = "monthly", country = "") {
+  const usd = interval === "annual"
+    ? Number(plan.annualUsd || 0)
+    : Number(plan.monthlyUsd || 0);
+  if (!usd) return { primary: "Free", note: "forever" };
+  const period = interval === "annual" ? "year" : "month";
+  const currency = localCurrencyForCountry(country);
+  const local = Math.round(usd * (usdRates[currency] || 1));
+  const localNote = currency !== "USD"
+    ? `~${formatCurrency(local, currency)} per ${period}`
+    : `per ${period}`;
+  return {
+    primary: formatCurrency(usd, "USD"),
+    note: localNote
+  };
 }
 
 function downloadCsv(filename, rows) {

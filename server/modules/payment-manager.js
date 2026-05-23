@@ -16,10 +16,12 @@ const PLANS = {
     name: "Explorer",
     monthlyKes: 0,
     annualKes: 0,
+    monthlyUsd: 0,
+    annualUsd: 0,
     badge: "Free",
     description: "Scholarship discovery and basic application tracking.",
     limits: {
-      maxApplications: 10,
+      maxApplications: Infinity,
       maxDocuments: 3,
       maxEssayGenerations: 90,      // 3 per day x 30 days
       maxEssayGenerationsPerDay: 3,  // Daily cap
@@ -31,7 +33,7 @@ const PLANS = {
     features: [
       "Open scholarship database",
       "Basic country, level and field filters",
-      "10 tracked applications",
+      "Unlimited application tracking",
       "3 document records",
       "3 AI essay generations per day",
       "3 scholarship applications per day",
@@ -41,14 +43,17 @@ const PLANS = {
   plus: {
     id: "plus",
     name: "Scholar Plus",
-    monthlyKes: 399,
-    annualKes: 3990,
+    monthlyKes: 650,
+    annualKes: 6500,
+    monthlyUsd: 5,
+    annualUsd: 50,
     badge: "Best value",
     description: "Premium matching and deadline control for active applicants.",
     limits: {
       maxApplications: Infinity,
       maxDocuments: Infinity,
-      maxEssayGenerations: 10,
+      maxEssayGenerations: 150,
+      maxEssayGenerationsPerDay: 15,
       maxAutoAppliesPerDay: 20,
       premiumFilters: true,
       documentAnalysis: true,
@@ -59,7 +64,7 @@ const PLANS = {
       "Premium accessibility and amount filters",
       "Smart match score from your profile",
       "Document gap analysis",
-      "10 AI essay generations/month",
+      "15 AI essay generations/day",
       "20 auto-applies/day",
       "Document intelligence analysis"
     ]
@@ -67,14 +72,17 @@ const PLANS = {
   pro: {
     id: "pro",
     name: "Application Pro",
-    monthlyKes: 999,
-    annualKes: 9990,
+    monthlyKes: 1550,
+    annualKes: 15500,
+    monthlyUsd: 12,
+    annualUsd: 120,
     badge: "Power user",
     description: "For applicants managing many countries, schools and deadlines.",
     limits: {
       maxApplications: Infinity,
       maxDocuments: Infinity,
-      maxEssayGenerations: 50,
+      maxEssayGenerations: 500,
+      maxEssayGenerationsPerDay: 50,
       maxAutoAppliesPerDay: 100,
       premiumFilters: true,
       documentAnalysis: true,
@@ -82,7 +90,7 @@ const PLANS = {
     },
     features: [
       "Everything in Scholar Plus",
-      "50 AI essay generations/month",
+      "50 AI essay generations/day",
       "100 auto-applies/day",
       "Priority urgency feed",
       "Advanced school and scholarship type filters",
@@ -92,14 +100,17 @@ const PLANS = {
   mentor: {
     id: "mentor",
     name: "Mentor Review",
-    monthlyKes: 2999,
-    annualKes: 29990,
+    monthlyKes: 3800,
+    annualKes: 38000,
+    monthlyUsd: 29,
+    annualUsd: 290,
     badge: "Concierge",
     description: "A higher tier for hands-on review workflows.",
     limits: {
       maxApplications: Infinity,
       maxDocuments: Infinity,
-      maxEssayGenerations: 200,
+      maxEssayGenerations: 1500,
+      maxEssayGenerationsPerDay: 150,
       maxAutoAppliesPerDay: 500,
       premiumFilters: true,
       documentAnalysis: true,
@@ -107,7 +118,7 @@ const PLANS = {
     },
     features: [
       "Everything in Application Pro",
-      "200 AI essay generations/month",
+      "150 AI essay generations/day",
       "500 auto-applies/day",
       "Review queue for CV, SOP and essays",
       "Interview preparation tracker",
@@ -127,6 +138,82 @@ const SUBSCRIPTION_STATUS = {
   CANCELED: "canceled",
   EXPIRED: "expired"
 };
+
+const COUNTRY_CURRENCY = {
+  Kenya: "KES",
+  Nigeria: "NGN",
+  Ghana: "GHS",
+  "South Africa": "ZAR",
+  Uganda: "UGX",
+  Tanzania: "TZS",
+  Rwanda: "RWF",
+  Ethiopia: "ETB",
+  Egypt: "EGP",
+  Morocco: "MAD",
+  "United States": "USD",
+  USA: "USD"
+};
+
+const USD_RATES = {
+  USD: 1,
+  KES: 130,
+  NGN: 1500,
+  GHS: 15,
+  ZAR: 18,
+  UGX: 3800,
+  TZS: 2600,
+  RWF: 1300,
+  ETB: 57,
+  EGP: 48,
+  MAD: 10
+};
+
+function currencyForCountry(country = "") {
+  return COUNTRY_CURRENCY[country] || "USD";
+}
+
+function currencyMinorUnit(currency = "USD") {
+  return ["JPY", "KRW", "UGX", "RWF"].includes(currency) ? 1 : 100;
+}
+
+function convertUsd(amountUsd, currency = "USD") {
+  const rate = USD_RATES[currency] || 1;
+  return Math.max(0, Math.round(amountUsd * rate));
+}
+
+function planPrice(plan, interval = "monthly", currency = "USD") {
+  const usd = interval === "annual"
+    ? Number(plan.annualUsd || 0)
+    : Number(plan.monthlyUsd || 0);
+  return {
+    amountUsd: usd,
+    currency,
+    amount: convertUsd(usd, currency),
+    minorAmount: convertUsd(usd, currency) * currencyMinorUnit(currency),
+    approximate: currency !== "USD"
+  };
+}
+
+function localizePlan(plan, country = "", interval = "monthly") {
+  const currency = currencyForCountry(country);
+  const price = planPrice(plan, interval, currency);
+  const monthly = planPrice(plan, "monthly", currency);
+  const annual = planPrice(plan, "annual", currency);
+  return {
+    ...plan,
+    monthlyLocal: monthly.amount,
+    annualLocal: annual.amount,
+    localCurrency: currency,
+    displayPrice: price.amountUsd
+      ? {
+          usd: price.amountUsd,
+          currency: price.currency,
+          local: price.amount,
+          approximate: price.approximate
+        }
+      : null
+  };
+}
 
 // --- Trial Management ---
 
@@ -262,14 +349,18 @@ function checkLimitWithUsage(user, type, monthlyUsed, dailyUsed) {
       allowed: false,
       reason: `Daily limit reached (${dailyUsed}/${dailyLimit}). Try again tomorrow or upgrade.`,
       limit: dailyLimit,
-      used: dailyUsed
+      used: dailyUsed,
+      scope: "daily"
     };
   }
 
   return {
     allowed: true,
-    limit: monthlyLimit || Infinity,
+    limit: dailyLimit || monthlyLimit || Infinity,
+    monthlyLimit: monthlyLimit || Infinity,
+    dailyLimit: dailyLimit || Infinity,
     used: monthlyUsed,
+    dailyUsed,
     remaining: (monthlyLimit || Infinity) - monthlyUsed
   };
 }
@@ -287,7 +378,7 @@ function capitalizeField(field) {
 
 // --- Subscription Actions ---
 
-function subscribe(db, user, planId, reference, amount, currency = "KES") {
+function subscribe(db, user, planId, reference, amount, currency = "USD") {
   const plan = PLANS[planId];
   if (!plan || plan.id === "free") return { error: "Invalid plan" };
 
@@ -337,7 +428,7 @@ function cancelSubscription(db, user) {
     planId: previousPlan,
     reference: `cancel-${user.subscriptionReference || crypto.randomUUID()}`,
     amount: 0,
-    currency: "KES",
+    currency: user.subscriptionCurrency || "USD",
     status: "canceled",
     type: "cancellation",
     createdAt: nowIso()
@@ -355,7 +446,7 @@ function changePlan(db, user, newPlanId) {
 
   const oldPlan = PLANS[user.plan] || PLANS.free;
 
-  const isUpgrade = newPlan.monthlyKes > oldPlan.monthlyKes;
+  const isUpgrade = newPlan.monthlyUsd > oldPlan.monthlyUsd;
 
   user.plan = newPlan.id;
   user.planName = newPlan.name;
@@ -369,7 +460,7 @@ function changePlan(db, user, newPlanId) {
     planId: newPlan.id,
     reference: `change-${oldPlan.id}-to-${newPlan.id}-${Date.now()}`,
     amount: 0,
-    currency: "KES",
+    currency: user.subscriptionCurrency || "USD",
     status: "changed",
     type: isUpgrade ? "upgrade" : "downgrade",
     createdAt: nowIso()
@@ -395,7 +486,7 @@ function getPaymentHistory(db, userId) {
     payments: payments.slice(-20).reverse(), // Last 20
     totalPayments: payments.length,
     totalSpent,
-    currency: "KES",
+    currency: "USD",
     activeSubscription: subscriptions.filter((p) => p.status === "success").slice(-1)[0] || null
   };
 }
@@ -414,7 +505,7 @@ function generateInvoice(db, userId, paymentId) {
     reference: payment.reference,
     planName: plan?.name || payment.planId,
     amount: payment.amount,
-    currency: payment.currency || "KES",
+    currency: payment.currency || "USD",
     status: payment.status,
     type: payment.type,
     dueDate: new Date(new Date(payment.createdAt).getTime() + 30 * 24 * 60 * 60 * 1000).toISOString()
@@ -439,6 +530,8 @@ function getBillingSummary(db, userId) {
       status: user.planStatus,
       monthlyKes: plan.monthlyKes,
       annualKes: plan.annualKes,
+      monthlyUsd: plan.monthlyUsd,
+      annualUsd: plan.annualUsd,
       features: plan.features,
       limits: plan.limits
     },
@@ -459,6 +552,8 @@ function getBillingSummary(db, userId) {
       name: p.name,
       monthlyKes: p.monthlyKes,
       annualKes: p.annualKes,
+      monthlyUsd: p.monthlyUsd,
+      annualUsd: p.annualUsd,
       badge: p.badge,
       description: p.description,
       features: p.features,
@@ -469,7 +564,7 @@ function getBillingSummary(db, userId) {
 
 // --- Paystack API Integration ---
 
-async function initiatePayment(user, planId, email, amountKes) {
+async function initiatePayment(user, planId, email, amount, currency = "USD") {
   const reference = `zawadi-${planId}-${Date.now()}-${crypto.randomBytes(4).toString("hex")}`;
   const paystackKey = process.env.PAYSTACK_SECRET_KEY;
 
@@ -479,13 +574,15 @@ async function initiatePayment(user, planId, email, amountKes) {
 
   const body = {
     email,
-    amount: String(amountKes * 100), // Paystack uses kobo/cents
-    currency: "KES",
+    amount: String(amount * currencyMinorUnit(currency)),
+    currency,
     reference,
     callback_url: process.env.PAYSTACK_CALLBACK_URL || "",
     metadata: {
       userId: user.id,
-      planId
+      planId,
+      amountUsd: PLANS[planId]?.monthlyUsd || null,
+      displayCurrency: currency
     }
   };
 
@@ -544,7 +641,7 @@ function processWebhookEvent(event, db) {
       planId,
       reference: event.data.reference,
       amount: (event.data.amount || 0) / 100,
-      currency: event.data.currency || "KES",
+      currency: event.data.currency || "USD",
       status: "success",
       type: "subscription",
       createdAt: nowIso()
@@ -587,7 +684,7 @@ async function verifyPayment(reference) {
   }
 }
 
-// --- Pricing Plans for Upgrade Modal (KES one-time payment model) ---
+// --- Legacy one-time upgrade plans kept for backwards compatibility ---
 
 const UPGRADE_PLANS = {
   season_pass: {
@@ -639,6 +736,9 @@ export {
   getPaymentHistory,
   generateInvoice,
   getBillingSummary,
+  currencyForCountry,
+  planPrice,
+  localizePlan,
   initiatePayment,
   verifyPayment,
   verifyWebhookSignature,

@@ -26,8 +26,9 @@ const tiers = [
     features: [
       "Open scholarship database",
       "Basic country, level and field filters",
-      "10 tracked applications",
+      "Unlimited application tracking",
       "3 document records",
+      "3 AI essays per day",
       "Weekly in-app updates",
     ],
     cta: "Start Free",
@@ -36,7 +37,7 @@ const tiers = [
   {
     id: "plus",
     name: "Scholar Plus",
-    price: "KES 399",
+    price: "$5",
     period: "per month",
     badge: "Best value",
     description: "Premium matching and deadline control for active applicants.",
@@ -45,6 +46,7 @@ const tiers = [
       "Premium filters",
       "Smart match score",
       "Document gap analysis",
+      "15 AI essays/day",
       "20 auto-applies/day",
       "Document intelligence analysis",
     ],
@@ -54,7 +56,7 @@ const tiers = [
   {
     id: "pro",
     name: "Application Pro",
-    price: "KES 999",
+    price: "$12",
     period: "per month",
     badge: "Power user",
     description: "For applicants managing many countries, schools and deadlines.",

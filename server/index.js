@@ -5,6 +5,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import express from "express";
 import { createClient } from "@supabase/supabase-js";
+import mammoth from "mammoth";
+import { PDFParse } from "pdf-parse";
 
 // --- Zawadi AI Modules ---
 import { aiConfigured } from "./modules/ai-client.js";
@@ -17,6 +19,7 @@ import {
   PLANS, UPGRADE_PLANS, SUBSCRIPTION_STATUS, isTrialActive, trialsDaysLeft, startTrial, endTrial,
   getUserUsage, trackUsage, checkLimitWithUsage,
   subscribe, cancelSubscription, changePlan, getPaymentHistory, generateInvoice, getBillingSummary,
+  currencyForCountry, planPrice, localizePlan,
   initiatePayment, verifyPayment, verifyWebhookSignature, processWebhookEvent
 } from "./modules/payment-manager.js";
 import scholarshipIngestionRouter from "./modules/scholarship-ingestion.js";
@@ -52,6 +55,45 @@ const supabase =
 
 const app = express();
 
+app.disable("x-powered-by");
+app.use((req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+  res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+  res.setHeader("Cross-Origin-Opener-Policy", "same-origin");
+  next();
+});
+
+const rateBuckets = new Map();
+function rateLimit({ windowMs = 60_000, limit = 30 } = {}) {
+  return (req, res, next) => {
+    const key = `${req.ip || req.socket.remoteAddress || "local"}:${req.path}`;
+    const now = Date.now();
+    const bucket = rateBuckets.get(key) || { count: 0, resetAt: now + windowMs };
+    if (now > bucket.resetAt) {
+      bucket.count = 0;
+      bucket.resetAt = now + windowMs;
+    }
+    bucket.count += 1;
+    rateBuckets.set(key, bucket);
+    if (bucket.count > limit) {
+      res.status(429).json({ error: "Too many requests. Please wait a moment and try again." });
+      return;
+    }
+    next();
+  };
+}
+
+const sensitiveApiLimiter = rateLimit({ windowMs: 60_000, limit: 20 });
+const generationLimiter = rateLimit({ windowMs: 60_000, limit: 8 });
+
+app.use(
+  ["/api/auth", "/api/billing", "/api/payment", "/api/admin/login"],
+  sensitiveApiLimiter
+);
+app.use(["/api/essays/generate", "/api/essays/samples/upload"], generationLimiter);
+
 app.post(
   "/api/paystack/webhook",
   express.raw({ type: "application/json" }),
@@ -84,7 +126,7 @@ app.post(
   }
 );
 
-app.use(express.json({ limit: "4mb" }));
+app.use(express.json({ limit: "16mb" }));
 
 const nowIso = () => new Date().toISOString();
 
@@ -145,70 +187,7 @@ const africanCountries = [
   "Zimbabwe"
 ];
 
-const pricingPlans = [
-  {
-    id: "free",
-    name: "Explorer",
-    monthlyKes: 0,
-    annualKes: 0,
-    badge: "Free",
-    description: "Scholarship discovery and basic application tracking.",
-    features: [
-      "Open scholarship database",
-      "Basic country, level and field filters",
-      "10 tracked applications",
-      "3 document records",
-      "3 AI essay generations per day",
-      "3 scholarship applications per day",
-      "Weekly in-app updates"
-    ]
-  },
-  {
-    id: "plus",
-    name: "Scholar Plus",
-    monthlyKes: 399,
-    annualKes: 3990,
-    badge: "Best value",
-    description: "Premium matching and deadline control for active applicants.",
-    features: [
-      "Unlimited application tracking",
-      "Premium accessibility and amount filters",
-      "Smart match score from your profile",
-      "Document gap analysis",
-      "Browser notifications for new matches"
-    ]
-  },
-  {
-    id: "pro",
-    name: "Application Pro",
-    monthlyKes: 999,
-    annualKes: 9990,
-    badge: "Power user",
-    description: "For applicants managing many countries, schools and deadlines.",
-    features: [
-      "Everything in Scholar Plus",
-      "Unlimited document vault metadata",
-      "Priority urgency feed",
-      "Advanced school and scholarship type filters",
-      "CSV exports and intake tools"
-    ]
-  },
-  {
-    id: "mentor",
-    name: "Mentor Review",
-    monthlyKes: 2999,
-    annualKes: 29990,
-    badge: "Concierge",
-    description: "A higher tier for hands-on review workflows.",
-    features: [
-      "Everything in Application Pro",
-      "Review queue for CV, SOP and essays",
-      "Interview preparation tracker",
-      "Application readiness checklist",
-      "Designed for later human mentor operations"
-    ]
-  }
-];
+const pricingPlans = Object.values(PLANS);
 
 function createPasswordHash(password, salt = crypto.randomBytes(16).toString("hex")) {
   const hash = crypto.scryptSync(password, salt, 64).toString("hex");
@@ -519,7 +498,7 @@ function setSession(res, token) {
   res.cookie(sessionCookie, token, {
     httpOnly: true,
     sameSite: "lax",
-    secure: false,
+    secure: isProduction,
     maxAge: sessionMs,
     path: "/"
   });
@@ -724,14 +703,116 @@ function userDocuments(db, userId) {
   return db.documents.filter((item) => item.userId === userId);
 }
 
+function safeFileName(value = "upload.bin") {
+  return path.basename(String(value)).replace(/[^\w.\- ()]/g, "_").slice(0, 180) || "upload.bin";
+}
+
+function decodeDataUrl(data = "") {
+  const match = String(data).match(/^data:([^;,]+)?(;base64)?,(.*)$/s);
+  if (!match) return null;
+  const isBase64 = Boolean(match[2]);
+  const raw = match[3] || "";
+  return Buffer.from(isBase64 ? raw : decodeURIComponent(raw), isBase64 ? "base64" : "utf8");
+}
+
+async function writeLocalUpload(userId, fileName, data) {
+  const buffer = decodeDataUrl(data);
+  if (!buffer || buffer.length === 0) return null;
+  if (buffer.length > 10 * 1024 * 1024) {
+    throw new Error("File is too large. Upload files under 10 MB.");
+  }
+  const uploadDir = path.join(dataDir, "uploads", userId);
+  await fs.mkdir(uploadDir, { recursive: true });
+  const storedName = `${Date.now()}-${safeFileName(fileName)}`;
+  const uploadPath = path.join(uploadDir, storedName);
+  await fs.writeFile(uploadPath, buffer);
+  return {
+    buffer,
+    storagePath: `local:${userId}/${storedName}`,
+    filePath: uploadPath
+  };
+}
+
+async function extractTextFromUpload({ fileName = "", mimeType = "", data = "" }) {
+  const buffer = decodeDataUrl(data);
+  if (!buffer || buffer.length === 0) {
+    throw new Error("Upload data is missing or invalid.");
+  }
+  if (buffer.length > 10 * 1024 * 1024) {
+    throw new Error("Essay document is too large. Upload a file under 10 MB.");
+  }
+
+  const lowerName = fileName.toLowerCase();
+  if (lowerName.endsWith(".docx") || mimeType.includes("wordprocessingml")) {
+    const extracted = await mammoth.extractRawText({ buffer });
+    return text(extracted.value);
+  }
+
+  if (lowerName.endsWith(".pdf") || mimeType === "application/pdf") {
+    const parser = new PDFParse({ data: buffer });
+    try {
+      const result = await parser.getText();
+      return text(result.text);
+    } finally {
+      await parser.destroy?.();
+    }
+  }
+
+  throw new Error("Upload essay samples as PDF or DOCX files.");
+}
+
+const essayDocumentTypes = new Set(["essay", "motivation_letter", "statement_of_purpose"]);
+function isEssayLikeDocument(analysis, content = "", fileName = "") {
+  const detected = analysis?.detectedType || "";
+  if (essayDocumentTypes.has(detected)) return true;
+  const haystack = `${fileName} ${content.slice(0, 2000)}`.toLowerCase();
+  return [
+    "personal statement",
+    "statement of purpose",
+    "motivation letter",
+    "scholarship essay",
+    "leadership essay",
+    "study plan"
+  ].some((phrase) => haystack.includes(phrase));
+}
+
+function documentMatchesRequirement(doc, required) {
+  const requiredLower = required.toLowerCase();
+  const docSignals = [
+    doc.type,
+    doc.detectedType,
+    doc.readableType,
+    doc.name,
+    doc.fileName
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase()
+    .replace(/[_-]+/g, " ");
+
+  const aliases = {
+    cv: ["cv", "resume", "curriculum vitae"],
+    transcript: ["transcript", "academic record", "result slip"],
+    essay: ["essay", "personal statement", "statement of purpose", "sop", "motivation letter"],
+    "motivation letter": ["motivation letter", "letter of motivation", "cover letter"],
+    references: ["reference", "recommendation", "referee"],
+    passport: ["passport", "travel document"],
+    certificate: ["certificate", "degree certificate", "diploma"],
+    "financial need evidence": ["financial", "bank statement", "proof of funds", "need evidence"],
+    "admission letter": ["admission", "offer letter", "acceptance letter"]
+  };
+
+  const candidates = aliases[requiredLower] || [requiredLower];
+  return candidates.some((candidate) => docSignals.includes(candidate));
+}
+
 function calculateMatch(user, scholarship, docs) {
   const profile = user.profile || defaultProfile(user.country);
-  const uploadedDocTypes = docs.map((doc) => doc.type.toLowerCase());
   const missingDocuments = scholarship.requiredDocuments.filter(
-    (doc) => !uploadedDocTypes.includes(doc.toLowerCase())
+    (required) => !docs.some((doc) => documentMatchesRequirement(doc, required))
   );
   const reasons = [];
-  let score = 35;
+  let score = 30;
 
   if (
     scholarship.eligibleCountries.includes(profile.country) ||
@@ -740,7 +821,7 @@ function calculateMatch(user, scholarship, docs) {
       ["Africa", profile.region].includes(region)
     )
   ) {
-    score += 20;
+    score += 22;
     reasons.push(`${profile.country} eligible`);
   }
 
@@ -749,7 +830,7 @@ function calculateMatch(user, scholarship, docs) {
       level.toLowerCase().includes(profile.targetLevel.toLowerCase())
     )
   ) {
-    score += 15;
+    score += 16;
     reasons.push(`${profile.targetLevel} level`);
   }
 
@@ -761,7 +842,7 @@ function calculateMatch(user, scholarship, docs) {
     )
   );
   if (fieldMatch || scholarship.fields.includes("All fields")) {
-    score += 15;
+    score += 17;
     reasons.push(fieldMatch ? "Field match" : "Open field");
   }
 
@@ -778,8 +859,28 @@ function calculateMatch(user, scholarship, docs) {
     reasons.push("Study country match");
   }
 
+  const fundingSignal = `${scholarship.fundingType} ${scholarship.amountLabel}`.toLowerCase();
+  const wantsFullFunding = (profile.accessibilityNeeds || []).some((need) =>
+    need.toLowerCase().includes("fully funded") || need.toLowerCase().includes("full funding")
+  );
+  if (wantsFullFunding && fundingSignal.includes("fully funded")) {
+    score += 8;
+    reasons.push("Funding need match");
+  }
+
+  const accessibilityHits = (profile.accessibilityNeeds || []).filter((need) =>
+    scholarship.accessibility.some((tag) =>
+      tag.toLowerCase().includes(need.toLowerCase()) ||
+      need.toLowerCase().includes(tag.toLowerCase())
+    )
+  );
+  if (accessibilityHits.length) {
+    score += Math.min(8, accessibilityHits.length * 3);
+    reasons.push(`${accessibilityHits[0]} preference`);
+  }
+
   if (missingDocuments.length === 0) {
-    score += 7;
+    score += 9;
     reasons.push("Documents ready");
   } else if (missingDocuments.length <= 2) {
     score += 3;
@@ -968,7 +1069,12 @@ app.get("/api/config", (_req, res) => {
     },
     paystackConfigured: Boolean(process.env.PAYSTACK_SECRET_KEY),
     countries: africanCountries,
-    pricingPlans
+    pricingPlans,
+    pricing: {
+      baseCurrency: "USD",
+      minimumPaidPlanUsd: 5,
+      localCurrencyRatesAreApproximate: true
+    }
   });
 });
 
@@ -1434,6 +1540,15 @@ app.get("/api/documents", requireAuth, (req, res) => {
 
 app.post("/api/documents", requireAuth, async (req, res, next) => {
   try {
+    let localUpload = null;
+    if (req.body.data && !req.body.storagePath) {
+      localUpload = await writeLocalUpload(
+        req.user.id,
+        req.body.fileName || req.body.name || "document",
+        req.body.data
+      );
+    }
+
     const doc = {
       id: crypto.randomUUID(),
       userId: req.user.id,
@@ -1442,12 +1557,18 @@ app.post("/api/documents", requireAuth, async (req, res, next) => {
       fileName: text(req.body.fileName || req.body.name, "document"),
       size: Number(req.body.size || 0),
       mimeType: text(req.body.mimeType, ""),
-      storagePath: text(req.body.storagePath, ""),
-      source: text(req.body.source, "Local metadata"),
+      storagePath: text(req.body.storagePath || localUpload?.storagePath, ""),
+      source: text(req.body.source, localUpload ? "Local secure storage" : "Local metadata"),
       uploadedAt: nowIso()
     };
 
     req.db.documents.unshift(doc);
+    recordEvent(req.db, {
+      userId: req.user.id,
+      type: EVENT_TYPES.DOCUMENT_UPLOADED,
+      data: { document: doc.type, fileName: doc.fileName, storagePath: doc.storagePath },
+      metadata: { userCountry: req.user.country, plan: req.user.plan }
+    });
     await saveDb(req.db);
     res.status(201).json({ document: doc });
   } catch (error) {
@@ -1457,9 +1578,20 @@ app.post("/api/documents", requireAuth, async (req, res, next) => {
 
 app.delete("/api/documents/:id", requireAuth, async (req, res, next) => {
   try {
+    const doc = req.db.documents.find(
+      (item) => item.id === req.params.id && item.userId === req.user.id
+    );
     req.db.documents = req.db.documents.filter(
       (doc) => !(doc.id === req.params.id && doc.userId === req.user.id)
     );
+    if (doc?.storagePath?.startsWith("local:")) {
+      const relative = doc.storagePath.slice("local:".length).replace(/[\\/]+/g, path.sep);
+      const targetPath = path.resolve(dataDir, "uploads", relative);
+      const uploadsRoot = path.resolve(dataDir, "uploads");
+      if (targetPath.startsWith(uploadsRoot)) {
+        await fs.rm(targetPath, { force: true }).catch(() => {});
+      }
+    }
     await saveDb(req.db);
     res.json({ ok: true });
   } catch (error) {
@@ -1478,8 +1610,13 @@ app.get("/api/updates", requireAuth, (req, res) => {
 
 // --- Enhanced Billing & Subscription ---
 
-app.get("/api/pricing", (_req, res) => {
-  res.json({ plans: Object.values(PLANS) });
+app.get("/api/pricing", (req, res) => {
+  const country = text(req.query.country, "");
+  res.json({
+    plans: Object.values(PLANS).map((plan) => localizePlan(plan, country)),
+    baseCurrency: "USD",
+    localCurrency: currencyForCountry(country)
+  });
 });
 
 // Get full billing dashboard
@@ -1534,7 +1671,8 @@ app.post("/api/billing/checkout", requireAuth, async (req, res, next) => {
       return;
     }
 
-    const amountKes = interval === "annual" ? plan.annualKes : plan.monthlyKes;
+    const checkoutCurrency = process.env.PAYSTACK_CURRENCY || currencyForCountry(req.user.country);
+    const checkoutPrice = planPrice(plan, interval, checkoutCurrency);
     const reference = `zawadi-${planId}-${Date.now()}-${crypto.randomBytes(4).toString("hex")}`;
     const planCode = process.env[
       `PAYSTACK_${planId.toUpperCase()}_${interval.toUpperCase()}_PLAN_CODE`
@@ -1547,14 +1685,16 @@ app.post("/api/billing/checkout", requireAuth, async (req, res, next) => {
 
     const body = {
       email: req.user.email,
-      amount: String(amountKes * 100),
-      currency: "KES",
+      amount: String(checkoutPrice.minorAmount),
+      currency: checkoutCurrency,
       reference,
       callback_url: process.env.PAYSTACK_CALLBACK_URL || `http://localhost:${port}`,
       metadata: {
         userId: req.user.id,
         planId,
-        interval
+        interval,
+        amountUsd: checkoutPrice.amountUsd,
+        displayCurrency: checkoutCurrency
       }
     };
     if (planCode) body.plan = planCode;
@@ -1576,7 +1716,7 @@ app.post("/api/billing/checkout", requireAuth, async (req, res, next) => {
     res.json({
       authorizationUrl: payload.data.authorization_url,
       reference: payload.data.reference,
-      plan
+      plan: localizePlan(plan, req.user.country, interval)
     });
   } catch (error) {
     next(error);
@@ -1635,34 +1775,45 @@ app.get("/api/billing/usage", requireAuth, (req, res) => {
 // Paystack Payment Integration — New Routes
 // ============================================================
 
-// POST /api/payment/initiate — Create Paystack payment link (KES amounts, userId in metadata)
+// POST /api/payment/initiate — Create Paystack payment link (USD-first pricing, local currency in metadata)
 app.post("/api/payment/initiate", requireAuth, async (req, res, next) => {
   try {
-    const planId = text(req.body.planId, "season_pass");
-    const upgradePlan = UPGRADE_PLANS[planId];
-    const legacyPlan = PLANS[planId];
+    const planId = text(req.body.planId, "plus");
+    const plan = PLANS[planId];
 
-    if (!upgradePlan && !legacyPlan) {
-      res.status(400).json({ error: "Invalid plan. Choose season_pass or premium." });
+    if (!plan || plan.id === "free") {
+      res.status(400).json({ error: "Choose a paid plan." });
       return;
     }
-
-    const amountKes = upgradePlan ? upgradePlan.priceKes : legacyPlan.monthlyKes;
 
     // If user already on this plan and is_paid, no need to repay
     if (req.user.plan === planId && req.user.is_paid) {
       res.json({
         alreadyPaid: true,
-        plan: upgradePlan || legacyPlan,
+        plan: localizePlan(plan, req.user.country),
         message: "You already have access to this plan."
       });
       return;
     }
 
-    const result = await initiatePayment(req.user, planId, req.user.email, amountKes);
+    const checkoutCurrency = process.env.PAYSTACK_CURRENCY || currencyForCountry(req.user.country);
+    const checkoutPrice = planPrice(plan, "monthly", checkoutCurrency);
+    const result = await initiatePayment(
+      req.user,
+      planId,
+      req.user.email,
+      checkoutPrice.amount,
+      checkoutCurrency
+    );
 
-    res.json(result);
+    res.json({ ...result, plan: localizePlan(plan, req.user.country) });
   } catch (error) {
+    if (
+      /upload|essay document|could not extract|too large/i.test(error.message || "")
+    ) {
+      res.status(400).json({ error: error.message });
+      return;
+    }
     next(error);
   }
 });
@@ -1727,24 +1878,10 @@ app.post(
 
 // --- Upgrade Plans Endpoint (for UpgradeModal) ---
 app.get("/api/payment/plans", (_req, res) => {
-  const plans = [
-    {
-      id: "free",
-      name: "Explorer",
-      priceKes: 0,
-      badge: "Free",
-      description: "Scholarship discovery and basic application tracking.",
-      features: [
-        "Open scholarship database",
-        "Basic country, level and field filters",
-        "1 AI essay generation",
-        "Track up to 3 applications",
-        "Weekly in-app updates"
-      ]
-    },
-    ...Object.values(UPGRADE_PLANS)
-  ];
-  res.json({ plans });
+  res.json({
+    plans: Object.values(PLANS).map((plan) => localizePlan(plan)),
+    baseCurrency: "USD"
+  });
 });
 
 // ============================================================
@@ -1826,6 +1963,18 @@ app.post("/api/apply/:scholarshipId", requireAuth, async (req, res, next) => {
       return;
     }
 
+    const usage = getUserUsage(req.db, req.user.id);
+    const limit = checkLimitWithUsage(
+      req.user,
+      "autoApplies",
+      usage.monthly.autoApplies || 0,
+      usage.daily.autoApplies || 0
+    );
+    if (!limit.allowed) {
+      res.status(403).json({ error: limit.reason, limit });
+      return;
+    }
+
     const userDocs = userDocuments(req.db, req.user.id);
     const result = await autoApply({
       user: req.user,
@@ -1901,6 +2050,7 @@ app.post("/api/apply/:scholarshipId", requireAuth, async (req, res, next) => {
       });
     }
 
+    trackUsage(req.db, req.user.id, "autoApplies", 1);
     await saveDb(req.db);
 
     res.json({
@@ -1920,6 +2070,26 @@ app.post("/api/apply/batch", requireAuth, async (req, res, next) => {
 
     if (!scholarships.length) {
       res.status(400).json({ error: "No matching scholarships found" });
+      return;
+    }
+
+    const usage = getUserUsage(req.db, req.user.id);
+    const limit = checkLimitWithUsage(
+      req.user,
+      "autoApplies",
+      usage.monthly.autoApplies || 0,
+      usage.daily.autoApplies || 0
+    );
+    const remainingDaily = Number.isFinite(limit.limit)
+      ? Math.max(0, limit.limit - (usage.daily.autoApplies || 0))
+      : scholarships.length;
+    if (!limit.allowed || scholarships.length > remainingDaily) {
+      res.status(403).json({
+        error: limit.allowed
+          ? `Daily auto-apply limit allows ${remainingDaily} more application(s) today.`
+          : limit.reason,
+        limit
+      });
       return;
     }
 
@@ -1957,6 +2127,7 @@ app.post("/api/apply/batch", requireAuth, async (req, res, next) => {
       }
     }
 
+    trackUsage(req.db, req.user.id, "autoApplies", batchResult.results.length);
     await saveDb(req.db);
 
     res.json(batchResult);
@@ -2037,6 +2208,22 @@ app.post("/api/essays/generate", requireAuth, async (req, res, next) => {
       return;
     }
 
+    const usage = getUserUsage(req.db, req.user.id);
+    const limit = checkLimitWithUsage(
+      req.user,
+      "essayGenerations",
+      usage.monthly.essayGenerations || 0,
+      usage.daily.essayGenerations || 0
+    );
+    if (!limit.allowed) {
+      res.status(403).json({
+        error: true,
+        message: limit.reason,
+        limit
+      });
+      return;
+    }
+
     // Get scholarship details if specified
     const scholarship = scholarshipId
       ? req.db.scholarships.find((s) => s.id === scholarshipId) || null
@@ -2074,6 +2261,7 @@ app.post("/api/essays/generate", requireAuth, async (req, res, next) => {
       data: { essayType, wordCount: result.wordCount, samplesUsed: result.samplesUsed },
       metadata: { userCountry: req.user.country, plan: req.user.plan }
     });
+    trackUsage(req.db, req.user.id, "essayGenerations", 1);
     await saveDb(req.db);
 
     res.json(result);
@@ -2108,6 +2296,80 @@ app.post("/api/essays/samples", requireAuth, async (req, res, next) => {
 
     res.status(201).json({ sample, totalSamples: req.db.essaySamples.filter((s) => s.userId === req.user.id).length });
   } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/essays/samples/upload", requireAuth, async (req, res, next) => {
+  try {
+    const fileName = safeFileName(req.body.fileName || "essay-sample");
+    const mimeType = text(req.body.mimeType, "");
+    const title = text(req.body.title, fileName.replace(/\.[^.]+$/, ""));
+    const content = await extractTextFromUpload({
+      fileName,
+      mimeType,
+      data: req.body.data
+    });
+
+    if (!content || content.length < 50) {
+      res.status(400).json({ error: "Could not extract enough text from this essay sample." });
+      return;
+    }
+
+    const analysis = await detectDocumentType({
+      fileName,
+      mimeType,
+      contentText: content,
+      fileSize: Number(req.body.size || 0)
+    });
+
+    if (!isEssayLikeDocument(analysis, content, fileName)) {
+      res.status(400).json({
+        error: "This file does not look like an essay, personal statement, statement of purpose, motivation letter, leadership essay, or study plan."
+      });
+      return;
+    }
+
+    if (!req.db.essaySamples) req.db.essaySamples = [];
+    const sample = {
+      id: crypto.randomUUID(),
+      userId: req.user.id,
+      title,
+      type: analysis.detectedType || "essay",
+      fileName,
+      mimeType,
+      content,
+      wordCount: content.split(/\s+/).filter(Boolean).length,
+      extraction: {
+        wordCount: content.split(/\s+/).filter(Boolean).length,
+        detectedType: analysis.detectedType,
+        confidence: analysis.confidence,
+        method: analysis.detectionMethod
+      },
+      uploadedAt: nowIso()
+    };
+
+    req.db.essaySamples.push(sample);
+    recordEvent(req.db, {
+      userId: req.user.id,
+      type: EVENT_TYPES.DOCUMENT_UPLOADED,
+      data: { document: "essay_sample", fileName, detectedType: analysis.detectedType },
+      metadata: { userCountry: req.user.country, plan: req.user.plan }
+    });
+    await saveDb(req.db);
+
+    res.status(201).json({
+      sample,
+      extraction: sample.extraction,
+      totalSamples: req.db.essaySamples.filter((s) => s.userId === req.user.id).length
+    });
+  } catch (error) {
+    if (
+      /upload|essay document|could not extract|too large|pdf|docx/i.test(error.message || "")
+    ) {
+      res.status(400).json({ error: error.message });
+      return;
+    }
     next(error);
   }
 });
@@ -2373,6 +2635,7 @@ app.get("/api/admin/users", requireAuth, requireAdmin, (req, res) => {
     const totalSpent = payments.reduce((sum, p) => sum + (p.amount || 0), 0);
     return {
       id: u.id,
+      userId: u.id,
       name: u.name,
       email: u.email,
       country: u.country,
@@ -2389,7 +2652,7 @@ app.get("/api/admin/users", requireAuth, requireAdmin, (req, res) => {
       totalSpent,
       lastPayment: payments.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0] || null,
       subscriptionAmount: u.subscriptionAmount || 0,
-      subscriptionCurrency: u.subscriptionCurrency || "KES",
+      subscriptionCurrency: u.subscriptionCurrency || "USD",
       subscriptionReference: u.subscriptionReference || "",
       subscriptionRenewsAt: u.subscriptionRenewsAt || "",
       trialEndsAt: u.trialEndsAt || ""
@@ -2477,14 +2740,71 @@ app.get("/api/admin/users", requireAuth, requireAdmin, (req, res) => {
       active: paidSubs.length,
       trial: trialSubs.length,
       canceled: canceledSubs.length,
+      monthlyRevenue: mrr,
+      lifetimeRevenue: lifetime,
       monthlyRevenueKes: mrr,
-      lifetimeRevenueKes: lifetime
+      lifetimeRevenueKes: lifetime,
+      currency: "USD"
     },
     stats: {
       totalScholarships: req.db.scholarships.length,
       totalApplications: req.db.applications.length,
       totalDocuments: req.db.documents.length,
       missingLinks
+    }
+  });
+});
+
+app.get("/api/admin/dashboard", requireAuth, requireAdmin, (req, res) => {
+  const users = req.db.users.map((u) => {
+    const payments = (req.db.payments || []).filter((p) => p.userId === u.id);
+    const totalSpent = payments
+      .filter((p) => p.status === "success")
+      .reduce((sum, p) => sum + (p.amount || 0), 0);
+    return {
+      id: u.id,
+      userId: u.id,
+      name: u.name,
+      email: u.email,
+      country: u.country,
+      plan: u.plan,
+      planName: u.planName,
+      planStatus: u.planStatus || "free",
+      is_paid: Boolean(u.is_paid),
+      role: u.role || "user",
+      subscriptionAmount: u.subscriptionAmount || 0,
+      subscriptionCurrency: u.subscriptionCurrency || "USD",
+      subscriptionReference: u.subscriptionReference || "",
+      subscriptionRenewsAt: u.subscriptionRenewsAt || "",
+      paymentsCount: payments.length,
+      totalSpent,
+      lastPayment: payments.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0] || null,
+      applicationsCount: req.db.applications.filter((a) => a.userId === u.id).length,
+      documentsCount: req.db.documents.filter((d) => d.userId === u.id).length
+    };
+  });
+
+  const scholarships = req.db.scholarships.map((s) => ({
+    ...s,
+    isBotInjected: Boolean(s.source?.toLowerCase().includes("bot") || s.createdBy?.toLowerCase().includes("bot"))
+  }));
+  const subscriptions = users.filter((u) => u.role !== "admin");
+  const paidSubs = subscriptions.filter((u) => u.is_paid);
+
+  res.json({
+    users,
+    subscriptions,
+    scholarships,
+    plans: Object.values(PLANS).map((p) => ({ id: p.id, name: p.name })),
+    stats: {
+      totalUsers: users.length,
+      paidUsers: paidSubs.length,
+      totalScholarships: scholarships.length,
+      verifiedScholarships: scholarships.filter((s) => s.verifiedAt).length,
+      unverifiedScholarships: scholarships.filter((s) => !s.verifiedAt).length,
+      totalApplications: req.db.applications.length,
+      totalDocuments: req.db.documents.length,
+      monthlyRevenueUsd: paidSubs.reduce((sum, u) => sum + (u.subscriptionAmount || 0), 0)
     }
   });
 });
@@ -2519,7 +2839,7 @@ app.patch("/api/admin/users/:id", requireAuth, requireAdmin, async (req, res, ne
 
     // Subscription billing fields
     if (req.body.subscriptionAmount !== undefined) user.subscriptionAmount = Number(req.body.subscriptionAmount) || 0;
-    if (req.body.subscriptionCurrency !== undefined) user.subscriptionCurrency = text(req.body.subscriptionCurrency, "KES");
+    if (req.body.subscriptionCurrency !== undefined) user.subscriptionCurrency = text(req.body.subscriptionCurrency, "USD");
     if (req.body.subscriptionReference !== undefined) user.subscriptionReference = text(req.body.subscriptionReference);
     if (req.body.subscriptionRenewsAt !== undefined) user.subscriptionRenewsAt = text(req.body.subscriptionRenewsAt);
     if (req.body.trialEndsAt !== undefined) user.trialEndsAt = text(req.body.trialEndsAt);
@@ -2574,7 +2894,7 @@ app.patch("/api/admin/subscriptions/:id", requireAuth, requireAdmin, async (req,
     if (planStatus !== undefined) user.planStatus = planStatus;
     if (is_paid !== undefined) user.is_paid = Boolean(is_paid);
     if (subscriptionAmount !== undefined) user.subscriptionAmount = Number(subscriptionAmount) || 0;
-    if (subscriptionCurrency !== undefined) user.subscriptionCurrency = subscriptionCurrency || "KES";
+    if (subscriptionCurrency !== undefined) user.subscriptionCurrency = subscriptionCurrency || "USD";
     if (subscriptionReference !== undefined) user.subscriptionReference = subscriptionReference;
     if (subscriptionRenewsAt !== undefined) user.subscriptionRenewsAt = subscriptionRenewsAt;
 

@@ -33,6 +33,7 @@ export default function EssayGenerator({ api, scholarships = [], user, onToast, 
   const [sampleFile, setSampleFile] = React.useState(null);
   const [sampleTitle, setSampleTitle] = React.useState("");
   const [generationCount, setGenerationCount] = React.useState(0);
+  const [essayLimit, setEssayLimit] = React.useState(3);
   const [usageLoading, setUsageLoading] = React.useState(true);
 
   // Edit & learning state
@@ -45,7 +46,6 @@ export default function EssayGenerator({ api, scholarships = [], user, onToast, 
   const [preferences, setPreferences] = React.useState(null);
 
   const isFree = user?.plan === "free" && !user?.is_paid;
-  const essayLimit = 1;
   const limitReached = isFree && generationCount >= essayLimit;
 
   // Load essay types, samples, and usage on mount
@@ -60,7 +60,8 @@ export default function EssayGenerator({ api, scholarships = [], user, onToast, 
     setUsageLoading(true);
     try {
       const data = await api("/api/billing/usage");
-      setGenerationCount(data.monthly?.essayGenerations || 0);
+      setGenerationCount(data.daily?.essayGenerations || 0);
+      setEssayLimit(data.limits?.maxEssayGenerationsPerDay || 3);
     } catch {
       setGenerationCount(0);
     } finally {
@@ -249,7 +250,7 @@ export default function EssayGenerator({ api, scholarships = [], user, onToast, 
         <div className="free-tier-banner">
           <Lock size={16} />
           <span>
-            Free plan: {generationCount}/{essayLimit} essay generated this month.{" "}
+            Free plan: {generationCount}/{essayLimit} essays generated today.{" "}
           </span>
           <button className="ghost-btn" onClick={onUpgrade}>
             Upgrade for unlimited essays

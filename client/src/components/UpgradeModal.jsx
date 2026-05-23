@@ -8,7 +8,37 @@ import {
   CheckCircle2, AlertTriangle, ShieldCheck, ChevronRight
 } from "lucide-react";
 
-const TIER_ICONS = { free: Sparkles, season_pass: Zap, premium: Crown };
+const TIER_ICONS = { free: Sparkles, plus: Zap, pro: Crown, mentor: Crown };
+const countryCurrency = {
+  Kenya: "KES",
+  Nigeria: "NGN",
+  Ghana: "GHS",
+  "South Africa": "ZAR",
+  Uganda: "UGX",
+  Tanzania: "TZS",
+  Rwanda: "RWF",
+  Ethiopia: "ETB",
+  Egypt: "EGP",
+  Morocco: "MAD",
+  "United States": "USD",
+  USA: "USD"
+};
+const usdRates = { USD: 1, KES: 130, NGN: 1500, GHS: 15, ZAR: 18, UGX: 3800, TZS: 2600, RWF: 1300, ETB: 57, EGP: 48, MAD: 10 };
+
+function currencyForCountry(country = "") {
+  return countryCurrency[country] || "USD";
+}
+
+function priceForPlan(plan, country = "") {
+  const usd = Number(plan.monthlyUsd || plan.displayPrice?.usd || 0);
+  if (!usd) return { primary: "Free", note: "forever" };
+  const currency = currencyForCountry(country);
+  const local = Math.round(usd * (usdRates[currency] || 1));
+  return {
+    primary: `$${usd.toLocaleString()}`,
+    note: currency === "USD" ? "per month" : `~${currency} ${local.toLocaleString()} per month`
+  };
+}
 
 export default function UpgradeModal({ plans, user, onClose, onUpgrade, onToast }) {
   const [loadingPlan, setLoadingPlan] = React.useState(null);
@@ -84,10 +114,11 @@ export default function UpgradeModal({ plans, user, onClose, onUpgrade, onToast 
         {/* Pricing tiers */}
         <div className="upgrade-tiers">
           {(plans || []).map((plan) => {
-            const isRecommended = plan.badge === "Recommended";
+            const isRecommended = plan.badge === "Best value" || plan.badge === "Recommended";
             const isCurrent = user?.plan === plan.id;
             const Icon = TIER_ICONS[plan.id] || Sparkles;
             const isLoading = loadingPlan === plan.id;
+            const price = priceForPlan(plan, user?.country);
 
             return (
               <article
@@ -110,12 +141,12 @@ export default function UpgradeModal({ plans, user, onClose, onUpgrade, onToast 
                 <p className="tier-description">{plan.description}</p>
 
                 <div className="tier-price">
-                  {plan.priceKes === 0 ? (
+                  {plan.id === "free" ? (
                     <strong className="price-free">Free</strong>
                   ) : (
                     <>
-                      <strong>KES {plan.priceKes.toLocaleString()}</strong>
-                      <span className="price-note">one-time payment</span>
+                      <strong>{price.primary}</strong>
+                      <span className="price-note">{price.note}</span>
                     </>
                   )}
                 </div>
@@ -148,7 +179,7 @@ export default function UpgradeModal({ plans, user, onClose, onUpgrade, onToast 
                     ? "Your Plan"
                     : isLoading
                     ? "Creating Payment..."
-                    : `Pay KES ${plan.priceKes.toLocaleString()}`}
+                    : `Pay ${price.primary}`}
                 </button>
 
                 {plan.id !== "free" && (
