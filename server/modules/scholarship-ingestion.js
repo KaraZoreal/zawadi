@@ -280,10 +280,45 @@ async function ingestScholarships(req, res) {
   let errorCount = 0;
   const details = [];
 
+  const AGGREGATOR_PATTERNS = [
+    /afterschoolafrica\.com/i,
+    /opportunitydesk\.org/i,
+    /scholarshipset\.com/i,
+    /scholars4dev\.com/i,
+    /scholarshipregion\.com/i,
+    /scholarshiplit\.com/i,
+    /scholarshipsads\.com/i,
+    /globalsouthopportunities\.com/i,
+    /workabroadlink\.com/i,
+    /youropportunitiesafrica\.com/i,
+  ];
+
+  function isValidDirectLink(url) {
+    if (!url || !url.startsWith("http")) return false;
+    // Must not be an aggregator
+    for (const pattern of AGGREGATOR_PATTERNS) {
+      if (pattern.test(url)) return false;
+    }
+    return true;
+  }
+
   for (const record of batch) {
     const localScholarship = toLocalScholarship(record, source);
     const dedupKey = localScholarship._dedupKey;
     const nameHostKey = `${record.name.toLowerCase().trim()}::${record.host.toLowerCase().trim()}`;
+
+    // --- Link validation ---
+    const rawApply = record.APPLY || record.apply_url || record.apply || "";
+    if (!isValidDirectLink(rawApply)) {
+      skippedCount++;
+      details.push({
+        name: record.name,
+        host: record.host,
+        status: "skipped",
+        reason: `Missing or invalid direct application link. Got: "${rawApply}". Must be a direct URL on the official scholarship website, not an aggregator page.`
+      });
+      continue;
+    }
 
     // --- Dedup check ---
     if (existingDedupKeys.has(dedupKey) || existingNameHost.has(nameHostKey)) {
