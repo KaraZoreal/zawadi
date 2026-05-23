@@ -861,6 +861,7 @@ function serializeUser(user) {
     planStatus: user.planStatus,
     is_paid: Boolean(user.is_paid),
     paid_at: user.paid_at || null,
+    role: user.role || "user",
     profile: user.profile,
     createdAt: user.createdAt
   };
@@ -2367,34 +2368,128 @@ app.post("/api/admin/login", async (req, res, next) => {
 
 // Get all users (admin only)
 app.get("/api/admin/users", requireAuth, requireAdmin, (req, res) => {
-  const users = req.db.users.map(u => ({
-    id: u.id,
-    name: u.name,
-    email: u.email,
-    country: u.country,
-    plan: u.plan,
-    planName: u.planName,
-    planStatus: u.planStatus,
-    is_paid: Boolean(u.is_paid),
-    role: u.role || "user",
-    createdAt: u.createdAt,
-    applicationsCount: req.db.applications.filter(a => a.userId === u.id).length,
-    documentsCount: req.db.documents.filter(d => d.userId === u.id).length
-  }));
+  const users = req.db.users.map(u => {
+    const payments = (req.db.payments || []).filter(p => p.userId === u.id);
+    const totalSpent = payments.reduce((sum, p) => sum + (p.amount || 0), 0);
+    return {
+      id: u.id,
+      name: u.name,
+      email: u.email,
+      country: u.country,
+      plan: u.plan,
+      planName: u.planName,
+      planStatus: u.planStatus || "free",
+      is_paid: Boolean(u.is_paid),
+      role: u.role || "user",
+      createdAt: u.createdAt,
+      applicationsCount: req.db.applications.filter(a => a.userId === u.id).length,
+      documentsCount: req.db.documents.filter(d => d.userId === u.id).length,
+      sessionsCount: req.db.sessions.filter(s => s.userId === u.id).length,
+      paymentsCount: payments.length,
+      totalSpent,
+      lastPayment: payments.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0] || null,
+      subscriptionAmount: u.subscriptionAmount || 0,
+      subscriptionCurrency: u.subscriptionCurrency || "KES",
+      subscriptionReference: u.subscriptionReference || "",
+      subscriptionRenewsAt: u.subscriptionRenewsAt || "",
+      trialEndsAt: u.trialEndsAt || ""
+    };
+  });
+
+  // Compute categories from scholarship fields
+  const allFields = req.db.scholarships.flatMap(s => s.fields || []);
+  const fieldCount = {};
+  allFields.forEach(f => { if (f) fieldCount[f] = (fieldCount[f] || 0) + 1; });
+  const categories = Object.entries(fieldCount)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 12)
+    .map(([name, count]) => ({
+      name,
+      count,
+      botInjected: req.db.scholarships.filter(s =>
+        (s.fields || []).includes(name) &&
+        (s.source?.toLowerCase().includes("bot") || s.createdBy?.toLowerCase().includes("bot"))
+      ).length
+    }));
+
+  // Compute sources
+  const sourceCount = {};
+  req.db.scholarships.forEach(s => {
+    const src = s.source || "Unknown";
+    sourceCount[src] = (sourceCount[src] || 0) + 1;
+  });
+  const sources = Object.entries(sourceCount)
+    .sort((a, b) => b[1] - a[1])
+    .map(([source, count]) => ({ source, count }));
+
+  // Subscriptions view (all users as subscribers)
+  const subscriptions = users.filter(u => u.role !== "admin");
+
+  // Subscription stats
+  const paidSubs = subscriptions.filter(u => u.is_paid);
+  const trialSubs = subscriptions.filter(u => u.planStatus === "trial");
+  const canceledSubs = subscriptions.filter(u => u.planStatus === "canceled" || u.planStatus === "expired");
+  const mrr = paidSubs.reduce((sum, u) => sum + (u.subscriptionAmount || 0), 0);
+  const lifetime = subscriptions.reduce((sum, u) => sum + (u.totalSpent || 0), 0);
+
+  // Ingestion info
+  const botInjected = req.db.scholarships.filter(s =>
+    s.source?.toLowerCase().includes("bot") || s.createdBy?.toLowerCase().includes("bot")
+  );
+  const ingestion = {
+    configured: Boolean(process.env.INGEST_API_KEY),
+    endpoint: "/api/ingest",
+    botInjected: botInjected.length,
+    recent: botInjected.slice(0, 6)
+  };
+
+  // Audit findings
+  const auditIssues = [];
+  const missingLinks = req.db.scholarships.filter(s => !s.officialUrl).length;
+  const unverified = req.db.scholarships.filter(s => !s.verifiedAt).length;
+  if (missingLinks > 0) {
+    auditIssues.push({ area: "Data quality", title: "Missing official URLs", detail: `${missingLinks} scholarships have no official link.`, severity: "warning", action: "Add officialUrl for each scholarship." });
+  }
+  if (unverified > 0) {
+    auditIssues.push({ area: "Publishing", title: "Unverified scholarships", detail: `${unverified} scholarships are not published to users.`, severity: "info", action: "Review and publish from the Scholarships tab." });
+  }
+  const audit = {
+    issues: auditIssues,
+    summary: {
+      total: auditIssues.length,
+      critical: auditIssues.filter(i => i.severity === "critical").length,
+      warning: auditIssues.filter(i => i.severity === "warning").length,
+      info: auditIssues.filter(i => i.severity === "info").length
+    }
+  };
 
   res.json({
     users,
+    subscriptions,
+    categories,
+    sources,
+    ingestion,
+    audit,
     total: users.length,
     plans: Object.values(PLANS).map(p => ({ id: p.id, name: p.name })),
+    subscriptionStats: {
+      total: subscriptions.length,
+      active: paidSubs.length,
+      trial: trialSubs.length,
+      canceled: canceledSubs.length,
+      monthlyRevenueKes: mrr,
+      lifetimeRevenueKes: lifetime
+    },
     stats: {
       totalScholarships: req.db.scholarships.length,
       totalApplications: req.db.applications.length,
-      totalDocuments: req.db.documents.length
+      totalDocuments: req.db.documents.length,
+      missingLinks
     }
   });
 });
 
-// Update user plan (admin only)
+// Update user (admin only) — supports full profile + subscription fields
 app.patch("/api/admin/users/:id", requireAuth, requireAdmin, async (req, res, next) => {
   try {
     const user = req.db.users.find(u => u.id === req.params.id);
@@ -2403,6 +2498,13 @@ app.patch("/api/admin/users/:id", requireAuth, requireAdmin, async (req, res, ne
       return;
     }
 
+    // Basic profile
+    if (req.body.name !== undefined) user.name = text(req.body.name);
+    if (req.body.email !== undefined) user.email = text(req.body.email).toLowerCase();
+    if (req.body.country !== undefined) user.country = text(req.body.country);
+    if (req.body.role !== undefined) user.role = text(req.body.role);
+
+    // Plan
     if (req.body.plan !== undefined) {
       const plan = PLANS[req.body.plan];
       if (!plan) {
@@ -2411,11 +2513,77 @@ app.patch("/api/admin/users/:id", requireAuth, requireAdmin, async (req, res, ne
       }
       user.plan = req.body.plan;
       user.planName = plan.name;
-      user.is_paid = req.body.is_paid !== undefined ? Boolean(req.body.is_paid) : user.is_paid;
+    }
+    if (req.body.planStatus !== undefined) user.planStatus = req.body.planStatus;
+    if (req.body.is_paid !== undefined) user.is_paid = Boolean(req.body.is_paid);
+
+    // Subscription billing fields
+    if (req.body.subscriptionAmount !== undefined) user.subscriptionAmount = Number(req.body.subscriptionAmount) || 0;
+    if (req.body.subscriptionCurrency !== undefined) user.subscriptionCurrency = text(req.body.subscriptionCurrency, "KES");
+    if (req.body.subscriptionReference !== undefined) user.subscriptionReference = text(req.body.subscriptionReference);
+    if (req.body.subscriptionRenewsAt !== undefined) user.subscriptionRenewsAt = text(req.body.subscriptionRenewsAt);
+    if (req.body.trialEndsAt !== undefined) user.trialEndsAt = text(req.body.trialEndsAt);
+
+    await saveDb(req.db);
+    res.json({ ok: true, user: serializeUser(normalizeUser(user)) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Delete user (admin only)
+app.delete("/api/admin/users/:id", requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    const userId = req.params.id;
+    const before = req.db.users.length;
+    req.db.users = req.db.users.filter(u => u.id !== userId);
+    if (req.db.users.length === before) {
+      res.status(404).json({ error: "User not found" });
+      return;
+    }
+    // Cascade delete user data
+    req.db.sessions = req.db.sessions.filter(s => s.userId !== userId);
+    req.db.applications = req.db.applications.filter(a => a.userId !== userId);
+    req.db.documents = req.db.documents.filter(d => d.userId !== userId);
+    req.db.payments = (req.db.payments || []).filter(p => p.userId !== userId);
+    await saveDb(req.db);
+    res.json({ ok: true });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Manage subscription (admin only) — alias to PATCH user for subscription fields
+app.patch("/api/admin/subscriptions/:id", requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    const user = req.db.users.find(u => u.id === req.params.id);
+    if (!user) {
+      res.status(404).json({ error: "Subscriber not found" });
+      return;
     }
 
-    if (req.body.planStatus !== undefined) {
-      user.planStatus = req.body.planStatus;
+    const { action, plan, planStatus, is_paid, subscriptionAmount, subscriptionCurrency, subscriptionReference, subscriptionRenewsAt } = req.body;
+
+    if (plan !== undefined) {
+      const planData = PLANS[plan];
+      if (planData) {
+        user.plan = plan;
+        user.planName = planData.name;
+      }
+    }
+    if (planStatus !== undefined) user.planStatus = planStatus;
+    if (is_paid !== undefined) user.is_paid = Boolean(is_paid);
+    if (subscriptionAmount !== undefined) user.subscriptionAmount = Number(subscriptionAmount) || 0;
+    if (subscriptionCurrency !== undefined) user.subscriptionCurrency = subscriptionCurrency || "KES";
+    if (subscriptionReference !== undefined) user.subscriptionReference = subscriptionReference;
+    if (subscriptionRenewsAt !== undefined) user.subscriptionRenewsAt = subscriptionRenewsAt;
+
+    if (action === "cancel") {
+      user.planStatus = "canceled";
+      user.is_paid = false;
+    } else if (action === "activate") {
+      user.planStatus = "active";
+      user.is_paid = true;
     }
 
     await saveDb(req.db);
@@ -2468,6 +2636,45 @@ app.post("/api/admin/scholarships", requireAuth, requireAdmin, async (req, res, 
     });
     await saveDb(req.db);
     res.status(201).json({ scholarship });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Bulk import scholarships (admin only)
+app.post("/api/admin/scholarships/bulk", requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    const incoming = Array.isArray(req.body.scholarships) ? req.body.scholarships : [];
+    if (!incoming.length) {
+      res.status(400).json({ error: "No scholarships provided" });
+      return;
+    }
+    const existingIds = new Set(req.db.scholarships.map(s => s.id));
+    let added = 0;
+    let skipped = 0;
+    for (const raw of incoming) {
+      const scholarship = sanitizeScholarship(
+        { ...raw, source: req.body.source || "Admin bulk import", createdBy: req.user.id },
+        req.user.id
+      );
+      if (existingIds.has(scholarship.id)) {
+        skipped++;
+        continue;
+      }
+      req.db.scholarships.unshift(scholarship);
+      existingIds.add(scholarship.id);
+      added++;
+    }
+    if (added > 0) {
+      req.db.notifications.unshift({
+        id: crypto.randomUUID(),
+        type: "bulk_import",
+        title: `${added} scholarships added via bulk import`,
+        createdAt: nowIso()
+      });
+      await saveDb(req.db);
+    }
+    res.json({ ok: true, added, skipped });
   } catch (error) {
     next(error);
   }

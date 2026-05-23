@@ -4,3 +4,4 @@ server/data/*.json
 server/data/uploads/
 *.log
 .DS_Store
+.env

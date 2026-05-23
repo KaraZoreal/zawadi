@@ -785,6 +785,12 @@ async function loadDashboard() {
     ]);
     state.dashboard = {
       users: usersData.users || [],
+      subscriptions: usersData.subscriptions || [],
+      subscriptionStats: usersData.subscriptionStats || {},
+      categories: usersData.categories || [],
+      sources: usersData.sources || [],
+      ingestion: usersData.ingestion || { configured: false, endpoint: "/api/ingest", botInjected: 0, recent: [] },
+      audit: usersData.audit || { issues: [], summary: { total: 0, critical: 0, warning: 0, info: 0 } },
       plans: usersData.plans || [],
       scholarships: scholarshipsData.scholarships || [],
       scholarshipStats: scholarshipsData.stats || {},
@@ -795,7 +801,8 @@ async function loadDashboard() {
         verifiedScholarships: (scholarshipsData.scholarships || []).filter((s) => s.verifiedAt).length,
         unverifiedScholarships: (scholarshipsData.scholarships || []).filter((s) => !s.verifiedAt).length,
         totalApplications: usersData.stats?.totalApplications || 0,
-        totalDocuments: usersData.stats?.totalDocuments || 0
+        totalDocuments: usersData.stats?.totalDocuments || 0,
+        missingLinks: usersData.stats?.missingLinks || 0
       }
     };
   } catch (error) {
@@ -889,7 +896,8 @@ function renderSidebar() {
   const tabs = [
     ["overview", "Overview"],
     ["scholarships", "Scholarships"],
-    ["users", "Users"]
+    ["users", "Users"],
+    ["subscriptions", "Subscriptions"]
   ];
   return h("aside", { className: "sidebar" },
     h("div", { className: "brand-row" },
@@ -918,7 +926,8 @@ function renderTopbar() {
   const titles = {
     overview: ["Operations", "Website management"],
     scholarships: ["Scholarships", "Scholarship management"],
-    users: ["Users", "User management"]
+    users: ["Users", "User management"],
+    subscriptions: ["Subscriptions", "Subscription & billing management"]
   };
   const [title, eyebrow] = titles[state.active] || titles.overview;
   return h("header", { className: "topbar" },
@@ -928,7 +937,7 @@ function renderTopbar() {
     ),
     h("div", { className: "row-actions" },
       h("button", { className: "quiet-btn", type: "button", onclick: loadDashboard, disabled: state.loading }, state.loading ? "Refreshing..." : "Refresh"),
-      h("button", { className: "primary-btn", type: "button", onclick: () => openScholarshipModal(null) }, "Add scholarship")
+      state.active === "scholarships" && h("button", { className: "primary-btn", type: "button", onclick: () => openScholarshipModal(null) }, "Add scholarship")
     )
   );
 }
@@ -937,21 +946,22 @@ function renderActiveView() {
   if (!state.dashboard) return h("section", { className: "empty" }, "No admin data loaded");
   if (state.active === "scholarships") return renderScholarships();
   if (state.active === "users") return renderUsers();
+  if (state.active === "subscriptions") return renderSubscriptions();
   return renderOverview();
 }
 
 function renderOverview() {
-  const stats = state.dashboard.stats;
+  const stats = state.dashboard?.stats || {};
   const scholarships = state.dashboard.scholarships || [];
   const users = state.dashboard.users || [];
   return h("div", {},
     h("section", { className: "metrics" },
-      metricCard("Total scholarships", stats.totalScholarships),
-      metricCard("Published", stats.verifiedScholarships),
-      metricCard("Pending review", stats.unverifiedScholarships),
-      metricCard("Total users", stats.totalUsers),
-      metricCard("Paid users", stats.paidUsers),
-      metricCard("Applications", stats.totalApplications)
+      metricCard("Total scholarships", stats.totalScholarships ?? 0),
+      metricCard("Published", stats.verifiedScholarships ?? 0),
+      metricCard("Pending review", stats.unverifiedScholarships ?? 0),
+      metricCard("Total users", stats.totalUsers ?? 0),
+      metricCard("Paid users", stats.paidUsers ?? 0),
+      metricCard("Applications", stats.totalApplications ?? 0)
     ),
     h("section", { className: "panel" },
       h("div", { className: "panel-head" },
@@ -1035,6 +1045,8 @@ function renderSources(sources) {
 
 function renderScholarships() {
   const rows = filteredScholarships();
+  const categories = state.dashboard.categories || [];
+  const sources = state.dashboard.sources || [];
   return h("section", { className: "panel" },
     h("div", { className: "panel-head" },
       h("div", {},
@@ -1050,8 +1062,8 @@ function renderScholarships() {
       h("label", { className: "search-label" }, "Search",
         h("input", { value: state.scholarshipSearch, placeholder: "Name, provider, country, field", oninput: (event) => { state.scholarshipSearch = event.target.value; render(); } })
       ),
-      selectLabel("Category", state.scholarshipCategory, ["All categories", ...state.dashboard.categories.map((item) => item.name)], (value) => { state.scholarshipCategory = value; render(); }),
-      selectLabel("Source", state.scholarshipSource, ["All sources", ...state.dashboard.sources.map((item) => item.source)], (value) => { state.scholarshipSource = value; render(); })
+      categories.length ? selectLabel("Field", state.scholarshipCategory, ["All categories", ...categories.map((item) => item.name)], (value) => { state.scholarshipCategory = value; render(); }) : null,
+      sources.length ? selectLabel("Source", state.scholarshipSource, ["All sources", ...sources.map((item) => item.source)], (value) => { state.scholarshipSource = value; render(); }) : null
     ),
     rows.length ? renderScholarshipTable(rows) : h("div", { className: "empty" }, "No scholarships match those filters")
   );
@@ -1072,7 +1084,7 @@ function filteredScholarships() {
       listText(row.categories)
     ].join(" ").toLowerCase();
     if (query && !haystack.includes(query)) return false;
-    if (state.scholarshipCategory !== "All categories" && !(row.categories || []).includes(state.scholarshipCategory)) return false;
+    if (state.scholarshipCategory !== "All categories" && !(row.fields || []).includes(state.scholarshipCategory)) return false;
     if (state.scholarshipSource !== "All sources" && row.source !== state.scholarshipSource) return false;
     return true;
   });
