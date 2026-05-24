@@ -1,6 +1,7 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
 import { createClient } from "@supabase/supabase-js";
+import { Analytics } from "@vercel/analytics/react";
 import {
   Bell,
   BellRing,
@@ -2190,4 +2191,9 @@ REQUIRED DOCUMENTS: CV, Transcript, Motivation Letter, References, Passport
 ACCESSIBILITY: Africa eligible, No GRE, Low application fee
 APPLY: https://example.edu/scholarship`;
 
-createRoot(document.getElementById("root")).render(<App />);
+createRoot(document.getElementById("root")).render(
+  <>
+    <App />
+    <Analytics />
+  </>
+);
