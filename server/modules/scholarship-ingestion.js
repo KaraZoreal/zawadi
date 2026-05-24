@@ -294,7 +294,7 @@ async function ingestScholarships(req, res) {
   ];
 
   function isValidDirectLink(url) {
-    if (!url || !url.startsWith("http")) return false;
+    if (!url || typeof url !== "string" || !url.startsWith("http")) return false;
     // Must not be an aggregator
     for (const pattern of AGGREGATOR_PATTERNS) {
       if (pattern.test(url)) return false;
@@ -308,7 +308,7 @@ async function ingestScholarships(req, res) {
     const nameHostKey = `${record.name.toLowerCase().trim()}::${record.host.toLowerCase().trim()}`;
 
     // --- Link validation ---
-    const rawApply = record.APPLY || record.apply_url || record.apply || "";
+    const rawApply = record.apply_url || "";
     if (!isValidDirectLink(rawApply)) {
       skippedCount++;
       details.push({
