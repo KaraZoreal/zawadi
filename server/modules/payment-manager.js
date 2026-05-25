@@ -564,7 +564,29 @@ function getBillingSummary(db, userId) {
 
 // --- Paystack API Integration ---
 
-async function initiatePayment(user, planId, email, amount, currency = "USD") {
+/**
+ * Get the Paystack plan code for a given plan + billing cycle.
+ * Env vars are named like PAYSTACK_PLUS_MONTHLY_PLAN_CODE
+ */
+function getPaystackPlanCode(planId, billingCycle = "monthly") {
+  const key = `PAYSTACK_${planId.toUpperCase()}_${billingCycle.toUpperCase()}_PLAN_CODE`;
+  return process.env[key] || null;
+}
+
+/**
+ * Initiate a Paystack subscription.
+ * Uses Paystack's /subscription endpoint for recurring billing.
+ * Falls back to /transaction/initialize for one-time if no plan code is configured.
+ *
+ * @param {object} user - The user object
+ * @param {string} planId - Plan ID (plus, pro, mentor)
+ * @param {string} email - User's email
+ * @param {number} amount - Amount in major currency unit (e.g. 650 for KES, 5 for USD)
+ * @param {string} currency - Currency code (KES, USD, NGN, etc.)
+ * @param {string} billingCycle - "monthly" or "annual"
+ * @returns {{ authorizationUrl, reference, plan, subscriptionCode }}
+ */
+async function initiatePayment(user, planId, email, amount, currency = "USD", billingCycle = "monthly") {
   const reference = `zawadi-${planId}-${Date.now()}-${crypto.randomBytes(4).toString("hex")}`;
   const paystackKey = process.env.PAYSTACK_SECRET_KEY;
 
@@ -572,6 +594,52 @@ async function initiatePayment(user, planId, email, amount, currency = "USD") {
     throw new Error("Payment processing is not configured. Please set PAYSTACK_SECRET_KEY.");
   }
 
+  const planCode = getPaystackPlanCode(planId, billingCycle);
+
+  // --- Path A: Paystack Subscription (recurring) ---
+  if (planCode) {
+    const subBody = {
+      email,
+      plan: planCode,
+      amount: String(amount * currencyMinorUnit(currency)),
+      currency,
+      reference,
+      callback_url: process.env.PAYSTACK_CALLBACK_URL || "",
+      metadata: {
+        userId: user.id,
+        planId,
+        billingCycle,
+        amountUsd: PLANS[planId]?.monthlyUsd || null,
+        displayCurrency: currency
+      }
+    };
+
+    try {
+      const response = await fetch("https://api.paystack.co/subscription", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${paystackKey}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(subBody)
+      });
+      const payload = await response.json();
+      if (!response.ok || !payload.status) {
+        throw new Error(payload.message || "Paystack subscription creation failed");
+      }
+      return {
+        authorizationUrl: payload.data?.authorization_url || null,
+        reference: payload.data?.reference || reference,
+        subscriptionCode: payload.data?.subscription_code || null,
+        plan: PLANS[planId],
+        billingCycle
+      };
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  // --- Path B: One-time transaction (fallback / legacy) ---
   const body = {
     email,
     amount: String(amount * currencyMinorUnit(currency)),
@@ -581,6 +649,7 @@ async function initiatePayment(user, planId, email, amount, currency = "USD") {
     metadata: {
       userId: user.id,
       planId,
+      billingCycle,
       amountUsd: PLANS[planId]?.monthlyUsd || null,
       displayCurrency: currency
     }
@@ -602,7 +671,9 @@ async function initiatePayment(user, planId, email, amount, currency = "USD") {
     return {
       authorizationUrl: payload.data.authorization_url,
       reference: payload.data.reference,
-      plan: PLANS[planId]
+      subscriptionCode: null,
+      plan: PLANS[planId],
+      billingCycle
     };
   } catch (error) {
     throw error;
@@ -615,6 +686,7 @@ function verifyWebhookSignature(payload, signature, secret) {
 }
 
 function processWebhookEvent(event, db) {
+  // --- One-time charge (legacy fallback) ---
   if (event.event === "charge.success") {
     const metadata = event.data?.metadata || {};
     const userId = metadata.userId;
@@ -648,6 +720,90 @@ function processWebhookEvent(event, db) {
     });
 
     return { success: true, userId, planId, planName };
+  }
+
+  // --- Subscription created / renewed ---
+  if (event.event === "subscription.create" || event.event === "invoice.create" || event.event === "invoice.payment_succeeded") {
+    const metadata = event.data?.metadata || {};
+    const userId = metadata.userId;
+    const planId = metadata.planId;
+    const subscriptionCode = event.data?.subscription_code || event.data?.subscription?.subscription_code || null;
+
+    if (!userId || !planId) return { success: false, reason: "Missing userId or planId in metadata" };
+
+    const user = db.users.find((u) => u.id === userId);
+    if (!user) return { success: false, reason: "User not found" };
+
+    const plan = PLANS[planId];
+    const planName = plan ? plan.name : planId;
+
+    user.plan = planId;
+    user.planName = planName;
+    user.is_paid = true;
+    user.paid_at = nowIso();
+    user.planStatus = SUBSCRIPTION_STATUS.ACTIVE;
+    user.subscriptionReference = event.data.reference || event.data?.subscription?.reference || null;
+    user.subscriptionCode = subscriptionCode;
+    user.subscribedAt = user.subscribedAt || nowIso();
+
+    // Set renewal date based on billing cycle
+    const billingCycle = metadata.billingCycle || "monthly";
+    const renewalDays = billingCycle === "annual" ? 365 : 30;
+    user.subscriptionRenewsAt = new Date(Date.now() + renewalDays * 24 * 60 * 60 * 1000).toISOString();
+
+    db.payments.push({
+      id: crypto.randomUUID(),
+      userId,
+      planId,
+      reference: event.data.reference || `sub-${Date.now()}`,
+      amount: (event.data.amount || 0) / 100,
+      currency: event.data.currency || "USD",
+      status: "success",
+      type: "subscription",
+      subscriptionCode,
+      createdAt: nowIso()
+    });
+
+    return { success: true, userId, planId, planName, type: "subscription" };
+  }
+
+  // --- Subscription cancelled / disabled ---
+  if (event.event === "subscription.not_renew" || event.event === "subscription.disable") {
+    const subscriptionCode = event.data?.subscription_code || null;
+    const userId = event.data?.customer?.metadata?.userId || event.data?.metadata?.userId;
+
+    // Find user by subscription code or userId
+    let user = null;
+    if (subscriptionCode) {
+      user = db.users.find((u) => u.subscriptionCode === subscriptionCode);
+    }
+    if (!user && userId) {
+      user = db.users.find((u) => u.id === userId);
+    }
+    if (!user) return { success: false, reason: "User not found for subscription cancellation" };
+
+    const previousPlan = user.plan;
+    const previousPlanName = user.planName;
+
+    user.plan = "free";
+    user.planName = "Explorer";
+    user.planStatus = SUBSCRIPTION_STATUS.CANCELED;
+    user.canceledAt = nowIso();
+    user.is_paid = false;
+
+    db.payments.push({
+      id: crypto.randomUUID(),
+      userId: user.id,
+      planId: previousPlan,
+      reference: `cancel-${user.subscriptionReference || crypto.randomUUID()}`,
+      amount: 0,
+      currency: user.subscriptionCurrency || "USD",
+      status: "canceled",
+      type: "cancellation",
+      createdAt: nowIso()
+    });
+
+    return { success: true, userId: user.id, planId: "free", planName: "Explorer", type: "cancellation" };
   }
 
   return { success: false, reason: `Unhandled event: ${event.event}` };

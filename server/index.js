@@ -1864,17 +1864,19 @@ app.post("/api/payment/initiate", requireAuth, async (req, res, next) => {
       return;
     }
 
+    const billingCycle = text(req.body.billingCycle, "monthly") === "annual" ? "annual" : "monthly";
     const checkoutCurrency = process.env.PAYSTACK_CURRENCY || currencyForCountry(req.user.country);
-    const checkoutPrice = planPrice(plan, "monthly", checkoutCurrency);
+    const checkoutPrice = planPrice(plan, billingCycle, checkoutCurrency);
     const result = await initiatePayment(
       req.user,
       planId,
       req.user.email,
       checkoutPrice.amount,
-      checkoutCurrency
+      checkoutCurrency,
+      billingCycle
     );
 
-    res.json({ ...result, plan: localizePlan(plan, req.user.country) });
+    res.json({ ...result, plan: localizePlan(plan, req.user.country), billingCycle });
   } catch (error) {
     if (
       /upload|essay document|could not extract|too large/i.test(error.message || "")
@@ -1905,6 +1907,36 @@ app.get("/api/payment/verify/:reference", requireAuth, async (req, res, next) =>
     }
 
     res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// GET /api/payment/subscription — Get current user's subscription status
+app.get("/api/payment/subscription", requireAuth, async (req, res) => {
+  res.json({
+    plan: req.user.plan,
+    planName: req.user.planName,
+    planStatus: req.user.planStatus,
+    isPaid: Boolean(req.user.is_paid),
+    subscribedAt: req.user.subscribedAt || null,
+    renewsAt: req.user.subscriptionRenewsAt || null,
+    canceledAt: req.user.canceledAt || null,
+    subscriptionCode: req.user.subscriptionCode || null
+  });
+});
+
+// POST /api/payment/cancel — Cancel subscription (downgrades to free at period end)
+app.post("/api/payment/cancel", requireAuth, async (req, res, next) => {
+  try {
+    const db = req.db;
+    const result = cancelSubscription(db, db.users.find((u) => u.id === req.user.id));
+    if (result.error) {
+      res.status(400).json({ error: result.error });
+      return;
+    }
+    await saveDb(db);
+    res.json({ ok: true, message: "Subscription canceled. You'll stay on your current plan until the billing period ends." });
   } catch (error) {
     next(error);
   }
