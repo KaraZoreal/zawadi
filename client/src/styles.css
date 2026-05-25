@@ -2755,6 +2755,171 @@ td small {
 }
 
 /* ============================================================
+   AUTH PAGE — Redesigned for landing page uniformity
+   ============================================================ */
+
+.auth-page .landing-nav {
+  position: relative;
+}
+
+.auth-hero {
+  padding: clamp(48px, 6vw, 80px) clamp(16px, 4vw, 48px);
+  background:
+    linear-gradient(160deg, rgba(224, 243, 235, 0.62), rgba(247, 235, 210, 0.44)),
+    repeating-linear-gradient(
+      0deg,
+      rgba(15, 110, 86, 0.06) 0,
+      rgba(15, 110, 86, 0.06) 1px,
+      transparent 1px,
+      transparent 48px
+    );
+}
+
+.auth-hero-grid {
+  max-width: 1280px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: minmax(300px, 1fr) minmax(380px, 480px);
+  gap: clamp(32px, 5vw, 64px);
+  align-items: start;
+}
+
+.auth-hero-copy {
+  display: grid;
+  gap: 16px;
+  position: sticky;
+  top: 80px;
+}
+
+.auth-hero-copy h1 {
+  margin: 0;
+  font-size: clamp(30px, 4vw, 44px);
+  line-height: 1.08;
+  letter-spacing: -0.02em;
+}
+
+.auth-hero-copy > p {
+  margin: 0;
+  font-size: clamp(15px, 1.6vw, 17px);
+  line-height: 1.65;
+  color: var(--muted);
+  max-width: 480px;
+}
+
+.auth-card {
+  width: 100%;
+  padding: 32px;
+  display: grid;
+  gap: 22px;
+}
+
+.auth-card .mode-switch {
+  margin-bottom: 0;
+}
+
+.auth-form {
+  display: grid;
+  gap: 16px;
+}
+
+.auth-form label {
+  display: grid;
+  gap: 6px;
+}
+
+.auth-form-icon {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  background: var(--green-soft);
+  color: var(--green);
+  margin: 0 auto 4px;
+}
+
+.auth-forgot-link {
+  background: none;
+  border: none;
+  color: var(--green);
+  font-size: 13px;
+  font-weight: 750;
+  cursor: pointer;
+  text-align: right;
+  padding: 4px 0;
+  margin-top: -6px;
+  transition: color 0.16s;
+}
+
+.auth-forgot-link:hover {
+  color: var(--ink);
+  text-decoration: underline;
+}
+
+.auth-back-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 720;
+  cursor: pointer;
+  padding: 8px 0;
+  transition: color 0.16s;
+}
+
+.auth-back-link:hover {
+  color: var(--green);
+}
+
+.auth-card-footer {
+  display: flex;
+  justify-content: center;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+
+.auth-card-footer .ghost-btn {
+  font-size: 13px;
+  min-height: 36px;
+}
+
+.form-success {
+  padding: 12px 14px;
+  border-radius: 8px;
+  color: var(--green);
+  background: var(--green-soft);
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-line;
+}
+
+/* Responsive */
+@media (max-width: 860px) {
+  .auth-hero-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .auth-hero-copy {
+    position: static;
+    text-align: center;
+  }
+
+  .auth-hero-copy > p {
+    margin: 0 auto;
+  }
+}
+
+@media (max-width: 540px) {
+  .auth-card {
+    padding: 22px;
+  }
+}
+
+/* ============================================================
    Upgrade Modal & Free-Tier Gating
    ============================================================ */
 

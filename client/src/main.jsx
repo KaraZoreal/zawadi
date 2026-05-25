@@ -2,6 +2,7 @@ import React, { Suspense, lazy } from "react";
 import { createRoot } from "react-dom/client";
 import { createClient } from "@supabase/supabase-js";
 import {
+  ArrowLeft,
   Bell,
   BellRing,
   BookOpen,
@@ -23,6 +24,7 @@ import {
   Loader2,
   Lock,
   LogOut,
+  Mail,
   Pencil,
   Plus,
   Search,
@@ -297,34 +299,79 @@ function AuthScreen({ config, initialMode = "login", onAuthed, onBackToLanding }
     name: "",
     email: "",
     password: "",
-    country: "Kenya"
+    country: "Kenya",
+    resetToken: "",
+    newPassword: "",
+    confirmPassword: ""
   });
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState("");
+  const [success, setSuccess] = React.useState("");
 
   React.useEffect(() => {
-    setMode(initialMode);
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get("token");
+    if (token) {
+      setForm((prev) => ({ ...prev, resetToken: token }));
+      setMode("reset");
+    } else {
+      setMode(initialMode);
+    }
   }, [initialMode]);
+
+  function resetForm() {
+    setError("");
+    setSuccess("");
+  }
 
   async function submit(event) {
     event.preventDefault();
     setLoading(true);
     setError("");
+    setSuccess("");
 
     try {
-      // Try Supabase auth first if configured
+      if (mode === "forgot") {
+        const data = await api("/api/auth/forgot-password", {
+          method: "POST",
+          body: JSON.stringify({ email: form.email })
+        });
+        setSuccess(
+          data.message +
+            (data.devResetUrl
+              ? `\n\nDev reset URL:\n${data.devResetUrl}`
+              : "")
+        );
+        return;
+      }
+
+      if (mode === "reset") {
+        if (form.newPassword !== form.confirmPassword) {
+          setError("Passwords do not match");
+          return;
+        }
+        const data = await api("/api/auth/reset-password", {
+          method: "POST",
+          body: JSON.stringify({
+            token: form.resetToken,
+            newPassword: form.newPassword
+          })
+        });
+        setSuccess(data.message);
+        setTimeout(() => {
+          setMode("login");
+          setSuccess("");
+        }, 4000);
+        return;
+      }
+
       if (supabaseClient) {
         try {
           if (mode === "register") {
             const { data, error: signUpError } = await supabaseClient.auth.signUp({
               email: form.email,
               password: form.password,
-              options: {
-                data: {
-                  name: form.name,
-                  country: form.country
-                }
-              }
+              options: { data: { name: form.name, country: form.country } }
             });
             if (signUpError) throw signUpError;
             if (!data.session) {
@@ -343,12 +390,10 @@ function AuthScreen({ config, initialMode = "login", onAuthed, onBackToLanding }
           onAuthed(me.user);
           return;
         } catch (supabaseErr) {
-          // Supabase auth failed — fall through to local auth
           console.warn("Supabase auth failed, falling back to local auth:", supabaseErr.message);
         }
       }
 
-      // Local auth fallback
       const path = mode === "login" ? "/api/auth/login" : "/api/auth/register";
       const data = await api(path, {
         method: "POST",
@@ -362,110 +407,241 @@ function AuthScreen({ config, initialMode = "login", onAuthed, onBackToLanding }
     }
   }
 
+  const navRight = (
+    <div className="landing-nav-actions">
+      <button className="ghost-btn" type="button" onClick={onBackToLanding}>
+        <ArrowLeft size={16} />
+        Back
+      </button>
+    </div>
+  );
+
   return (
-    <main className="auth-shell premium-auth">
-      <section className="auth-panel">
-        <BrandBlock />
-        <div className="auth-copy">
-          <h1>A scholarship portal for African applicants</h1>
-          <p>
-            Match with funding, track documents, watch deadlines and manage every
-            application from one premium web app.
-          </p>
-        </div>
-
-        <div className="mode-switch" aria-label="Authentication mode">
-          <button
-            type="button"
-            className={mode === "login" ? "active" : ""}
-            onClick={() => setMode("login")}
-          >
-            Sign in
-          </button>
-          <button
-            type="button"
-            className={mode === "register" ? "active" : ""}
-            onClick={() => setMode("register")}
-          >
-            Create account
-          </button>
-        </div>
-
-        <form className="auth-form" onSubmit={submit}>
-          {mode === "register" && (
-            <>
-              <label>
-                Name
-                <input
-                  value={form.name}
-                  onChange={(event) => setForm({ ...form, name: event.target.value })}
-                  autoComplete="name"
-                  required
-                />
-              </label>
-              <label>
-                Country
-                <input
-                  value={form.country}
-                  onChange={(event) =>
-                    setForm({ ...form, country: event.target.value })
-                  }
-                  autoComplete="country-name"
-                  required
-                />
-              </label>
-            </>
-          )}
-          <label>
-            Email
-            <input
-              type="email"
-              value={form.email}
-              onChange={(event) => setForm({ ...form, email: event.target.value })}
-              autoComplete="email"
-              required
-            />
-          </label>
-          <label>
-            Password
-            <input
-              type="password"
-              value={form.password}
-              onChange={(event) =>
-                setForm({ ...form, password: event.target.value })
-              }
-              autoComplete={mode === "login" ? "current-password" : "new-password"}
-              required
-              minLength={8}
-            />
-          </label>
-          {error && <div className="form-error">{error}</div>}
-          <button className="primary-btn full" type="submit" disabled={loading}>
-            {loading ? <Loader2 className="spin" size={18} /> : <Check size={18} />}
-            {mode === "login" ? "Sign in" : "Create account"}
-          </button>
-        </form>
-      </section>
-
-      <section className="auth-preview" aria-label="Scholarship portal preview">
-        <article className="glass-panel">
-          <div className="mini-top">
-            <Sparkles size={18} />
-            <span>Premium match</span>
-          </div>
-          <strong>89%</strong>
-          <p>Masters in Data Science, fully funded, Africa eligible.</p>
-        </article>
-        <div className="preview-table">
-          {["Applied", "Drafting", "Urgent", "Documents ready"].map((item, index) => (
-            <div key={item}>
-              <span>{item}</span>
-              <strong>{[12, 5, 3, 18][index]}</strong>
+    <div className="landing-root auth-page">
+      <header className="landing-nav">
+        <div className="landing-nav-inner">
+          <a href="/" className="landing-logo" onClick={(e) => { e.preventDefault(); onBackToLanding(); }}>
+            <div className="brand-mark" aria-hidden="true">
+              <GraduationCap size={22} />
             </div>
-          ))}
+            <div>
+              <strong>Techsari — Zawadi</strong>
+              <span>Scholarship Portal</span>
+            </div>
+          </a>
+          {navRight}
         </div>
-      </section>
-    </main>
+      </header>
+
+      <main className="auth-hero">
+        <div className="auth-hero-grid">
+          <div className="auth-hero-copy">
+            <span className="eyebrow">For African Students</span>
+            <h1>
+              {mode === "forgot"
+                ? "Reset your password"
+                : mode === "reset"
+                  ? "Choose a new password"
+                  : mode === "register"
+                    ? "Create your free account"
+                    : "Welcome back"}
+            </h1>
+            <p>
+              {mode === "forgot"
+                ? "Enter your email and we'll send you a link to reset your password."
+                : mode === "reset"
+                  ? "Your new password must be at least 8 characters."
+                  : mode === "register"
+                    ? "Tell us about yourself and start matching with scholarships you're actually eligible for."
+                    : "Sign in to continue your scholarship journey."}
+            </p>
+          </div>
+
+          <div className="glass-panel auth-card">
+            {mode === "forgot" || mode === "reset" ? null : (
+              <div className="mode-switch" aria-label="Authentication mode">
+                <button
+                  type="button"
+                  className={mode === "login" ? "active" : ""}
+                  onClick={() => { setMode("login"); resetForm(); }}
+                >
+                  Sign in
+                </button>
+                <button
+                  type="button"
+                  className={mode === "register" ? "active" : ""}
+                  onClick={() => { setMode("register"); resetForm(); }}
+                >
+                  Create account
+                </button>
+              </div>
+            )}
+
+            <form className="auth-form" onSubmit={submit}>
+              {mode === "forgot" && (
+                <>
+                  <div className="auth-form-icon">
+                    <Mail size={32} />
+                  </div>
+                  <label>
+                    Email address
+                    <input
+                      type="email"
+                      value={form.email}
+                      onChange={(e) => setForm({ ...form, email: e.target.value })}
+                      autoComplete="email"
+                      required
+                      placeholder="you@example.com"
+                    />
+                  </label>
+                  {error && <div className="form-error">{error}</div>}
+                  {success && <div className="form-success">{success}</div>}
+                  <button className="primary-btn full" type="submit" disabled={loading}>
+                    {loading ? <Loader2 className="spin" size={18} /> : <Mail size={18} />}
+                    Send reset link
+                  </button>
+                  <button
+                    type="button"
+                    className="auth-back-link"
+                    onClick={() => { setMode("login"); resetForm(); }}
+                  >
+                    <ArrowLeft size={14} />
+                    Back to sign in
+                  </button>
+                </>
+              )}
+
+              {mode === "reset" && (
+                <>
+                  <div className="auth-form-icon">
+                    <Lock size={32} />
+                  </div>
+                  <label>
+                    New password
+                    <input
+                      type="password"
+                      value={form.newPassword}
+                      onChange={(e) => setForm({ ...form, newPassword: e.target.value })}
+                      autoComplete="new-password"
+                      required
+                      minLength={8}
+                      placeholder="At least 8 characters"
+                    />
+                  </label>
+                  <label>
+                    Confirm password
+                    <input
+                      type="password"
+                      value={form.confirmPassword}
+                      onChange={(e) => setForm({ ...form, confirmPassword: e.target.value })}
+                      autoComplete="new-password"
+                      required
+                      minLength={8}
+                      placeholder="Repeat your password"
+                    />
+                  </label>
+                  {error && <div className="form-error">{error}</div>}
+                  {success && <div className="form-success">{success}</div>}
+                  <button className="primary-btn full" type="submit" disabled={loading}>
+                    {loading ? <Loader2 className="spin" size={18} /> : <Check size={18} />}
+                    Reset password
+                  </button>
+                  <button
+                    type="button"
+                    className="auth-back-link"
+                    onClick={() => { setMode("login"); resetForm(); }}
+                  >
+                    <ArrowLeft size={14} />
+                    Back to sign in
+                  </button>
+                </>
+              )}
+
+              {(mode === "login" || mode === "register") && (
+                <>
+                  {mode === "register" && (
+                    <>
+                      <label>
+                        Full name
+                        <input
+                          value={form.name}
+                          onChange={(e) => setForm({ ...form, name: e.target.value })}
+                          autoComplete="name"
+                          required
+                          placeholder="Your full name"
+                        />
+                      </label>
+                      <label>
+                        Country
+                        <input
+                          value={form.country}
+                          onChange={(e) => setForm({ ...form, country: e.target.value })}
+                          autoComplete="country-name"
+                          required
+                          placeholder="Kenya"
+                        />
+                      </label>
+                    </>
+                  )}
+                  <label>
+                    Email
+                    <input
+                      type="email"
+                      value={form.email}
+                      onChange={(e) => setForm({ ...form, email: e.target.value })}
+                      autoComplete="email"
+                      required
+                      placeholder="you@example.com"
+                    />
+                  </label>
+                  <label>
+                    Password
+                    <input
+                      type="password"
+                      value={form.password}
+                      onChange={(e) => setForm({ ...form, password: e.target.value })}
+                      autoComplete={mode === "login" ? "current-password" : "new-password"}
+                      required
+                      minLength={8}
+                      placeholder="At least 8 characters"
+                    />
+                  </label>
+                  {mode === "login" && (
+                    <button
+                      type="button"
+                      className="auth-forgot-link"
+                      onClick={() => { setMode("forgot"); resetForm(); }}
+                    >
+                      Forgot password?
+                    </button>
+                  )}
+                  {error && <div className="form-error">{error}</div>}
+                  {success && <div className="form-success">{success}</div>}
+                  <button className="primary-btn full" type="submit" disabled={loading}>
+                    {loading ? <Loader2 className="spin" size={18} /> : <Check size={18} />}
+                    {mode === "login" ? "Sign in" : "Create account"}
+                  </button>
+                </>
+              )}
+            </form>
+
+            <div className="auth-card-footer">
+              <button className="ghost-btn" type="button" onClick={onBackToLanding}>
+                <ArrowLeft size={14} />
+                Back to home
+              </button>
+            </div>
+          </div>
+        </div>
+      </main>
+
+      <footer className="landing-footer">
+        <div className="landing-footer-bottom" style={{ marginTop: 0, borderTop: 0 }}>
+          <span>&copy; {new Date().getFullYear()} Techsari. All rights reserved.</span>
+          <span>Built for African students everywhere.</span>
+        </div>
+      </footer>
+    </div>
   );
 }
 
