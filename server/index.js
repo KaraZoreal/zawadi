@@ -3445,31 +3445,33 @@ app.use((error, _req, res, _next) => {
 
 // Serve static files: production mode, or Vercel serverless
 if (isProduction || process.env.VERCEL === "1") {
-  const distDir = path.join(rootDir, "dist");
-  app.use(express.static(distDir));
+  // Try multiple possible locations for dist/ (Vercel bundles differently)
+  let distDir = path.join(rootDir, "dist");
+  try { fs.accessSync(distDir); } catch { distDir = path.join(process.cwd(), "dist"); }
+  try { fs.accessSync(distDir); } catch { distDir = path.join("/var/task", "dist"); }
+  console.log("Static files dir:", distDir);
 
-  // Admin page at /admin
-  app.get("/admin", (_req, res) => {
-    res.sendFile(path.join(distDir, "admin.html"));
-  });
+  app.use(express.static(distDir, { fallthrough: true }));
 
-  // Privacy Policy & Terms of Service
-  app.get("/privacy", (_req, res) => {
-    res.sendFile(path.join(distDir, "privacy.html"));
-  });
-  app.get("/terms", (_req, res) => {
-    res.sendFile(path.join(distDir, "terms.html"));
-  });
-  app.get("/faq", (_req, res) => {
-    res.sendFile(path.join(distDir, "faq.html"));
-  });
-  app.get("/about", (_req, res) => {
-    res.sendFile(path.join(distDir, "about.html"));
-  });
+  const sendPage = (route, file) => {
+    app.get(route, (_req, res) => {
+      res.sendFile(path.join(distDir, file), (err) => {
+        if (err) res.status(404).send("Page not found");
+      });
+    });
+  };
+
+  sendPage("/admin", "admin.html");
+  sendPage("/privacy", "privacy.html");
+  sendPage("/terms", "terms.html");
+  sendPage("/faq", "faq.html");
+  sendPage("/about", "about.html");
 
   // SPA fallback — return index.html for all non-API routes
   app.get("*", (_req, res) => {
-    res.sendFile(path.join(distDir, "index.html"));
+    res.sendFile(path.join(distDir, "index.html"), (err) => {
+      if (err) res.status(200).send("<!DOCTYPE html><html><body><h1>Techsari Zawadi</h1><p>Loading...</p></body></html>");
+    });
   });
 } else {
   // Local dev: use Vite dev server with HMR
