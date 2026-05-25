@@ -307,6 +307,39 @@ function AuthScreen({ config, initialMode = "login", onAuthed, onBackToLanding }
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState("");
   const [success, setSuccess] = React.useState("");
+  const [detectingCountry, setDetectingCountry] = React.useState(true);
+  const [countries] = React.useState((config?.countries || ["Kenya", "Nigeria", "Ghana", "South Africa", "Ethiopia", "Tanzania", "Uganda", "Rwanda", "Egypt", "Senegal", "Cameroon", "Zimbabwe", "Zambia", "Malawi", "Botswana", "Namibia", "Mauritius", "Morocco", "Algeria", "Tunisia", "Sudan", "Angola", "Mozambique", "DR Congo", "Congo", "Ivory Coast", "Mali", "Burkina Faso", "Niger", "Chad", "Somalia", "Liberia", "Sierra Leone", "Gambia", "Guinea", "Benin", "Togo", "Gabon", "Equatorial Guinea", "Burundi", "Djibouti", "Eritrea", "Eswatini", "Lesotho", "Madagascar", "Mauritania", "Seychelles", "South Sudan", "Cape Verde", "Comoros", "Sao Tome and Principe", "Central African Republic", "Guinea-Bissau"]).sort());
+
+  // Auto-detect country on mount
+  React.useEffect(() => {
+    detectCountry();
+  }, []);
+
+  async function detectCountry() {
+    try {
+      // Try server-side geolocation first
+      const locData = await api("/api/location");
+      if (locData.country && locData.detected) {
+        setForm((prev) => ({ ...prev, country: locData.country }));
+        setDetectingCountry(false);
+        return;
+      }
+    } catch {
+      // Server unavailable - try client-side fallback
+    }
+
+    // Client-side fallback: browser language/timezone
+    try {
+      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      const tzCountry = tz.split("/")[0] === "Africa" ? tz.split("/")[1]?.replace(/_/g, " ") : null;
+      if (tzCountry && countries.includes(tzCountry)) {
+        setForm((prev) => ({ ...prev, country: tzCountry }));
+      }
+    } catch {
+      // Keep default "Kenya"
+    }
+    setDetectingCountry(false);
+  }
 
   React.useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -336,12 +369,7 @@ function AuthScreen({ config, initialMode = "login", onAuthed, onBackToLanding }
           method: "POST",
           body: JSON.stringify({ email: form.email })
         });
-        setSuccess(
-          data.message +
-            (data.devResetUrl
-              ? `\n\nDev reset URL:\n${data.devResetUrl}`
-              : "")
-        );
+        setSuccess(data.message);
         return;
       }
 
@@ -365,6 +393,7 @@ function AuthScreen({ config, initialMode = "login", onAuthed, onBackToLanding }
         return;
       }
 
+      // Try Supabase first if available
       if (supabaseClient) {
         try {
           if (mode === "register") {
@@ -394,6 +423,7 @@ function AuthScreen({ config, initialMode = "login", onAuthed, onBackToLanding }
         }
       }
 
+      // Local auth fallback
       const path = mode === "login" ? "/api/auth/login" : "/api/auth/register";
       const data = await api(path, {
         method: "POST",
@@ -401,7 +431,11 @@ function AuthScreen({ config, initialMode = "login", onAuthed, onBackToLanding }
       });
       onAuthed(data.user);
     } catch (err) {
-      setError(err.message);
+      if (err.message === "Failed to fetch" || err.message.includes("NetworkError")) {
+        setError("Unable to connect to the server. Please check your internet connection and try again.");
+      } else {
+        setError(err.message || "Something went wrong. Please try again.");
+      }
     } finally {
       setLoading(false);
     }
@@ -573,13 +607,32 @@ function AuthScreen({ config, initialMode = "login", onAuthed, onBackToLanding }
                       </label>
                       <label>
                         Country
-                        <input
-                          value={form.country}
-                          onChange={(e) => setForm({ ...form, country: e.target.value })}
-                          autoComplete="country-name"
-                          required
-                          placeholder="Kenya"
-                        />
+                        {detectingCountry ? (
+                          <div className="country-detect" style={{ display: "flex", alignItems: "center", gap: "8px", padding: "10px 0", color: "#64748b", fontSize: "0.85rem" }}>
+                            <Loader2 className="spin" size={14} />
+                            Detecting your location...
+                          </div>
+                        ) : (
+                          <select
+                            value={form.country}
+                            onChange={(e) => setForm({ ...form, country: e.target.value })}
+                            required
+                            style={{
+                              width: "100%",
+                              padding: "10px 12px",
+                              border: "1px solid #dce4dc",
+                              borderRadius: "6px",
+                              fontSize: "0.9rem",
+                              background: "#fff",
+                              color: "#1e293b",
+                              cursor: "pointer"
+                            }}
+                          >
+                            {countries.map((c) => (
+                              <option key={c} value={c}>{c}</option>
+                            ))}
+                          </select>
+                        )}
                       </label>
                     </>
                   )}
@@ -636,9 +689,12 @@ function AuthScreen({ config, initialMode = "login", onAuthed, onBackToLanding }
       </main>
 
       <footer className="landing-footer">
-        <div className="landing-footer-bottom" style={{ marginTop: 0, borderTop: 0 }}>
-          <span>&copy; {new Date().getFullYear()} Techsari. All rights reserved.</span>
-          <span>Built for African students everywhere.</span>
+        <div className="landing-footer-bottom" style={{ marginTop: 0, borderTop: 0, display: "flex", gap: "16px", flexWrap: "wrap", justifyContent: "center" }}>
+          <span>&copy; {new Date().getFullYear()} Techsari.</span>
+          <a href="/privacy" style={{ color: "#64748b", textDecoration: "none", fontSize: "0.85rem" }}>Privacy</a>
+          <a href="/terms" style={{ color: "#64748b", textDecoration: "none", fontSize: "0.85rem" }}>Terms</a>
+          <a href="/faq" style={{ color: "#64748b", textDecoration: "none", fontSize: "0.85rem" }}>FAQ</a>
+          <span style={{ color: "#64748b", fontSize: "0.85rem" }}>Built for African students everywhere.</span>
         </div>
       </footer>
     </div>

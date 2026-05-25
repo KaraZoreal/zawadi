@@ -1147,6 +1147,44 @@ app.get("/api/health", (_req, res) => {
   });
 });
 
+// Auto-detect user country from IP (client-side fallback used when server unreachable)
+app.get("/api/location", async (_req, res) => {
+  try {
+    const ip = _req.headers["x-forwarded-for"]?.split(",")[0]?.trim() ||
+               _req.ip ||
+               _req.socket.remoteAddress ||
+               "";
+    // For localhost/Vercel internal, default to Kenya
+    if (!ip || ip === "127.0.0.1" || ip === "::1" || ip.startsWith("10.") || ip.startsWith("172.") || ip.startsWith("192.168.")) {
+      res.json({ country: "Kenya", detected: false });
+      return;
+    }
+    // Try geolocation (timeout via AbortController)
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3000);
+    try {
+      const response = await fetch(`https://ipapi.co/${ip}/json/`, {
+        headers: { "User-Agent": "Zawadi/1.0" },
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+      if (!response.ok) throw new Error("Geolocation failed");
+      const geo = await response.json();
+      if (geo.error) throw new Error(geo.reason || "Unknown");
+      const country = geo.country_name || "Kenya";
+      const isAfrican = africanCountries.some(
+        (c) => c.toLowerCase() === country.toLowerCase()
+      );
+      res.json({ country: isAfrican ? country : "Kenya", detected: isAfrican });
+    } catch {
+      clearTimeout(timeoutId);
+      res.json({ country: "Kenya", detected: false });
+    }
+  } catch {
+    res.json({ country: "Kenya", detected: false });
+  }
+});
+
 app.get("/api/config", (_req, res) => {
   res.json({
     supabase: {
@@ -3422,6 +3460,12 @@ if (isProduction || process.env.VERCEL === "1") {
   app.get("/terms", (_req, res) => {
     res.sendFile(path.join(distDir, "terms.html"));
   });
+  app.get("/faq", (_req, res) => {
+    res.sendFile(path.join(distDir, "faq.html"));
+  });
+  app.get("/about", (_req, res) => {
+    res.sendFile(path.join(distDir, "about.html"));
+  });
 
   // SPA fallback — return index.html for all non-API routes
   app.get("*", (_req, res) => {
@@ -3441,12 +3485,18 @@ if (isProduction || process.env.VERCEL === "1") {
     res.sendFile(path.join(rootDir, "public", "admin.html"));
   });
 
-  // Privacy Policy & Terms of Service in dev mode
+  // Privacy, Terms, FAQ, About in dev mode
   app.get("/privacy", (_req, res) => {
     res.sendFile(path.join(rootDir, "public", "privacy.html"));
   });
   app.get("/terms", (_req, res) => {
     res.sendFile(path.join(rootDir, "public", "terms.html"));
+  });
+  app.get("/faq", (_req, res) => {
+    res.sendFile(path.join(rootDir, "public", "faq.html"));
+  });
+  app.get("/about", (_req, res) => {
+    res.sendFile(path.join(rootDir, "public", "about.html"));
   });
 
   app.use(vite.middlewares);
