@@ -15,8 +15,9 @@ function copyDir(src, dest) {
 }
 
 // Copy api/ directory into dist/ so Vercel can find serverless functions
-const apiSrc = path.join(__dirname, 'api');
-const apiDest = path.join(__dirname, 'dist', 'api');
+const rootDir = path.join(__dirname, '..');
+const apiSrc = path.join(rootDir, 'api');
+const apiDest = path.join(rootDir, 'dist', 'api');
 
 if (fs.existsSync(apiSrc)) {
   copyDir(apiSrc, apiDest);
