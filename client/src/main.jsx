@@ -312,36 +312,43 @@ function AuthScreen({ config, initialMode = "login", onAuthed, onBackToLanding }
     setError("");
 
     try {
+      // Try Supabase auth first if configured
       if (supabaseClient) {
-        if (mode === "register") {
-          const { data, error: signUpError } = await supabaseClient.auth.signUp({
-            email: form.email,
-            password: form.password,
-            options: {
-              data: {
-                name: form.name,
-                country: form.country
-              }
-            }
-          });
-          if (signUpError) throw signUpError;
-          if (!data.session) {
-            setError("Check your email to confirm your account, then sign in.");
-            return;
-          }
-        } else {
-          const { error: signInError } =
-            await supabaseClient.auth.signInWithPassword({
+        try {
+          if (mode === "register") {
+            const { data, error: signUpError } = await supabaseClient.auth.signUp({
               email: form.email,
-              password: form.password
+              password: form.password,
+              options: {
+                data: {
+                  name: form.name,
+                  country: form.country
+                }
+              }
             });
-          if (signInError) throw signInError;
+            if (signUpError) throw signUpError;
+            if (!data.session) {
+              setError("Check your email to confirm your account, then sign in.");
+              return;
+            }
+          } else {
+            const { error: signInError } =
+              await supabaseClient.auth.signInWithPassword({
+                email: form.email,
+                password: form.password
+              });
+            if (signInError) throw signInError;
+          }
+          const me = await api("/api/me");
+          onAuthed(me.user);
+          return;
+        } catch (supabaseErr) {
+          // Supabase auth failed — fall through to local auth
+          console.warn("Supabase auth failed, falling back to local auth:", supabaseErr.message);
         }
-        const me = await api("/api/me");
-        onAuthed(me.user);
-        return;
       }
 
+      // Local auth fallback
       const path = mode === "login" ? "/api/auth/login" : "/api/auth/register";
       const data = await api(path, {
         method: "POST",
