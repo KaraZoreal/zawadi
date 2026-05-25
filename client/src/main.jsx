@@ -94,13 +94,18 @@ async function api(path, options = {}) {
     if(!supabase) return {user:null};
     const{data:{user:au}}=await supabase.auth.getUser();
     if(!au) return {user:null};
-    const{data:pr}=await supabase.from("user_profiles").select("*").eq("id",au.id).maybeSingle();
-    return {user:{id:au.id,email:au.email,name:pr?.name||"",country:pr?.country||"Kenya",plan:pr?.plan||"free",planName:pr?.plan==="plus"?"Plus":pr?.plan==="pro"?"Pro":pr?.plan==="mentor"?"Mentor":"Explorer",is_paid:!!(pr?.plan&&pr.plan!=="free"),role:"user"}};
+    let pr=null;
+    try{const r=await supabase.from("user_profiles").select("*").eq("id",au.id).maybeSingle();pr=r.data;}catch{/* table may not exist yet — use auth metadata */};
+    return {user:{id:au.id,email:au.email,name:pr?.name||au.user_metadata?.name||"",country:pr?.country||au.user_metadata?.country||"Kenya",plan:pr?.plan||"free",planName:pr?.plan==="plus"?"Plus":pr?.plan==="pro"?"Pro":pr?.plan==="mentor"?"Mentor":"Explorer",is_paid:!!(pr?.plan&&pr.plan!=="free"),role:"user"}};
   }
   if (path === "/api/scholarships" || path === "/api/scholarships/filtered") {
     if(!supabase) return {scholarships:[],stats:emptyStats(),documents:[]};
     const{data:s}=await supabase.from("scholarships").select("*").order("created_at",{ascending:false});
-    return {scholarships:s||[],stats:computeStats(s||[]),documents:[]};
+    const normalized = (s||[]).map(row=>({...row,
+      application:row.application||{applied:false,status:"Not started",priority:"Normal",notes:""},
+      match:row.match||{score:0,urgency:{tone:"normal",label:"Normal"},reasons:[],missingDocuments:[]}
+    }));
+    return {scholarships:normalized,stats:computeStats(normalized),documents:[]};
   }
   if (path === "/api/documents") {
     if(!supabase) return {documents:[]};
@@ -293,7 +298,7 @@ function App() {
         initialMode={authMode}
         onAuthed={async (nextUser) => {
           setUser(nextUser);
-          await loadScholarships();
+          try { await loadScholarships(); } catch (e) { showToast("Scholarship data loading, please wait…"); }
         }}
         onBackToLanding={() => setShowLanding(true)}
       />
@@ -335,11 +340,11 @@ function emptyStats() {
 function computeStats(rows) {
   return {
     total: rows.length,
-    applied: rows.filter((row) => row.application.applied).length,
-    drafting: rows.filter((row) => row.application.status === "Drafting").length,
-    notApplied: rows.filter((row) => !row.application.applied).length,
-    urgent: rows.filter((row) => row.match.urgency.tone === "urgent").length,
-    strongMatches: rows.filter((row) => row.match.score >= 75).length
+    applied: rows.filter((row) => row?.application?.applied).length,
+    drafting: rows.filter((row) => row?.application?.status === "Drafting").length,
+    notApplied: rows.filter((row) => !row?.application?.applied).length,
+    urgent: rows.filter((row) => row?.match?.urgency?.tone === "urgent").length,
+    strongMatches: rows.filter((row) => (row?.match?.score ?? 0) >= 75).length
   };
 }
 
