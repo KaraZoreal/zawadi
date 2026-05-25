@@ -10,7 +10,19 @@ import { createClient } from "@supabase/supabase-js";
 // CJS modules that don't expose default exports in strict ESM (Vercel runtime)
 const _require = createRequire(import.meta.url);
 const mammoth = _require("mammoth");
-const PDFParse = _require("pdf-parse");
+
+// pdf-parse needs browser DOM APIs — lazy-loaded only when needed
+let _pdfParse = null;
+async function getPdfParser() {
+  if (_pdfParse !== null) return _pdfParse;
+  try {
+    const mod = await import("pdf-parse");
+    _pdfParse = mod.default || mod;
+  } catch {
+    _pdfParse = false;
+  }
+  return _pdfParse;
+}
 
 // --- Zawadi AI Modules ---
 import { aiConfigured } from "./modules/ai-client.js";
@@ -816,7 +828,9 @@ async function extractTextFromUpload({ fileName = "", mimeType = "", data = "" }
   }
 
   if (lowerName.endsWith(".pdf") || mimeType === "application/pdf") {
-    const parser = new PDFParse({ data: buffer });
+    const Parser = await getPdfParser();
+    if (!Parser) throw new Error("PDF parsing is not available in this environment. Please upload DOCX files instead.");
+    const parser = new Parser({ data: buffer });
     try {
       const result = await parser.getText();
       return text(result.text);
