@@ -1,6 +1,7 @@
-// Vercel serverless function entry point
-import app from "../server/index.js";
-
 export default function handler(req, res) {
-  return app(req, res);
+  res.status(200).json({
+    ok: true,
+    message: "API is working!",
+    time: new Date().toISOString()
+  });
 }
