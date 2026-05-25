@@ -44,64 +44,124 @@ const IntelligencePanel = lazy(() => import("./components/IntelligencePanel.jsx"
 const UpgradeModal = lazy(() => import("./components/UpgradeModal.jsx"));
 const LandingPage = lazy(() => import("./components/LandingPage.jsx"));
 
-let supabaseClient = null;
+// --- Supabase Client (initialized from Vite env vars) ---
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const supabase = SUPABASE_URL && SUPABASE_ANON_KEY
+  ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+  : null;
 
 const statusOptions = [
-  "Not started",
-  "Saved",
-  "Drafting",
-  "Ready",
-  "Applied",
-  "Interview",
-  "Awarded",
-  "Rejected",
-  "Archived"
+  "Not started","Saved","Drafting","Ready","Applied","Interview","Awarded","Rejected","Archived"
 ];
-
-const priorityOptions = ["High", "Normal", "Low"];
+const priorityOptions = ["High","Normal","Low"];
 const documentTypes = [
-  "CV",
-  "Resume",
-  "Transcript",
-  "Certificate",
-  "Motivation Letter",
-  "Statement of Purpose",
-  "References",
-  "Passport",
-  "Financial Need Evidence",
-  "Admission Letter",
-  "Essay",
-  "Other"
+  "CV","Resume","Transcript","Certificate","Motivation Letter","Statement of Purpose",
+  "References","Passport","Financial Need Evidence","Admission Letter","Essay","Other"
 ];
 
+// --- Africa countries (hardcoded) ---
+const AFRICAN_COUNTRIES = ["Algeria","Angola","Benin","Botswana","Burkina Faso","Burundi","Cameroon","Cape Verde","Central African Republic","Chad","Comoros","Congo","Cote d'Ivoire","DR Congo","Djibouti","Egypt","Equatorial Guinea","Eritrea","Eswatini","Ethiopia","Gabon","Gambia","Ghana","Guinea","Guinea-Bissau","Kenya","Lesotho","Liberia","Libya","Madagascar","Malawi","Mali","Mauritania","Mauritius","Morocco","Mozambique","Namibia","Niger","Nigeria","Rwanda","Sao Tome and Principe","Senegal","Seychelles","Sierra Leone","Somalia","South Africa","South Sudan","Sudan","Tanzania","Togo","Tunisia","Uganda","Zambia","Zimbabwe"];
+
+// --- Pricing Plans (hardcoded — was in Express config) ---
+const PRICING_PLANS = [
+  { id:"free", name:"Explorer", monthlyUsd:0, annualUsd:0, badge:"Free", description:"Scholarship discovery and basic tracking.", limits:{maxDocuments:3,maxEssayGenerations:90}, features:["Open scholarship database","Basic filters","3 AI essays/day"] },
+  { id:"plus", name:"Plus", monthlyUsd:5, annualUsd:50, badge:"Plus", description:"Advanced tools for serious applicants.", limits:{maxDocuments:15,maxEssayGenerations:300,premiumFilters:true,documentAnalysis:true}, features:["Everything in Explorer","Premium filters","Document analysis","15 document records","10 AI essays/day","Priority email"] },
+  { id:"pro", name:"Pro", monthlyUsd:15, annualUsd:150, badge:"Pro", description:"Full suite for competitive scholarships.", limits:{maxDocuments:50,maxEssayGenerations:900,premiumFilters:true,documentAnalysis:true,prioritySupport:true}, features:["Everything in Plus","Unlimited AI essays","Bulk auto-apply","50 documents","Strategy insights","24hr support"] },
+  { id:"mentor", name:"Mentor", monthlyUsd:50, annualUsd:500, badge:"Mentor", description:"Complete mentorship experience.", limits:{maxDocuments:999,documentAnalysis:true,prioritySupport:true}, features:["Everything in Pro","1-on-1 mentorship","Interview prep","Custom strategy","Unlimited everything"] }
+];
+
+const ESSAY_TYPES_DATA = {
+  personal_statement:{label:"Personal Statement",description:"Your journey, goals, and why you deserve this scholarship",typicalLength:"500-1000 words"},
+  statement_of_purpose:{label:"Statement of Purpose",description:"Academic/professional goals, research interests",typicalLength:"800-1500 words"},
+  motivation_letter:{label:"Motivation Letter",description:"Why you are motivated for this opportunity",typicalLength:"500-800 words"},
+  leadership_essay:{label:"Leadership Essay",description:"Your leadership experience and potential",typicalLength:"500-800 words"},
+  diversity_statement:{label:"Diversity Statement",description:"How your background contributes to diversity",typicalLength:"500-800 words"},
+  research_proposal:{label:"Research Proposal",description:"Your proposed research project",typicalLength:"1000-2000 words"},
+  financial_need:{label:"Financial Need Statement",description:"Your financial situation and need",typicalLength:"300-500 words"}
+};
+
+// --- Data layer: Supabase-native (no Express server) ---
 async function api(path, options = {}) {
-  const headers = {
-    "Content-Type": "application/json",
-    ...(options.headers || {})
+  const method = options.method || "GET";
+  const body = options.body ? JSON.parse(options.body) : {};
+
+  if (path === "/api/config") return {
+    supabase:{configured:!!supabase,url:SUPABASE_URL||"",anonKey:SUPABASE_ANON_KEY||""},
+    pricingPlans:PRICING_PLANS, countries:AFRICAN_COUNTRIES, paystackConfigured:false
   };
-  const token = await getSupabaseToken();
-  if (token) headers.Authorization = `Bearer ${token}`;
+  if (path === "/api/me") {
+    if(!supabase) return {user:null};
+    const{data:{user:au}}=await supabase.auth.getUser();
+    if(!au) return {user:null};
+    const{data:pr}=await supabase.from("user_profiles").select("*").eq("id",au.id).maybeSingle();
+    return {user:{id:au.id,email:au.email,name:pr?.name||"",country:pr?.country||"Kenya",plan:pr?.plan||"free",planName:pr?.plan==="plus"?"Plus":pr?.plan==="pro"?"Pro":pr?.plan==="mentor"?"Mentor":"Explorer",is_paid:!!(pr?.plan&&pr.plan!=="free"),role:"user"}};
+  }
+  if (path === "/api/scholarships" || path === "/api/scholarships/filtered") {
+    if(!supabase) return {scholarships:[],stats:emptyStats(),documents:[]};
+    const{data:s}=await supabase.from("scholarships").select("*").order("created_at",{ascending:false});
+    return {scholarships:s||[],stats:computeStats(s||[]),documents:[]};
+  }
+  if (path === "/api/documents") {
+    if(!supabase) return {documents:[]};
+    const{data:{user}}=await supabase.auth.getUser();
+    if(!user) return {documents:[]};
+    const{data}=await supabase.from("documents").select("*").eq("user_id",user.id).order("created_at",{ascending:false});
+    return {documents:data||[]};
+  }
+  if (path === "/api/updates") return {latest:null};
+  if (path === "/api/location") {
+    try{const r=await fetch("https://ipapi.co/json/");const d=await r.json();return {country:d.country_name||null,detected:!!d.country_name}}
+    catch{return {country:null,detected:false}}
+  }
+  if (path === "/api/auth/logout") { if(supabase) await supabase.auth.signOut(); return {ok:true}; }
+  if (path === "/api/auth/forgot-password") {
+    if(!supabase) return {message:"If that email is registered, a reset link has been sent."};
+    const{error}=await supabase.auth.resetPasswordForEmail(body.email,{redirectTo:window.location.origin});
+    if(error) throw new Error(error.message);
+    return {message:"If that email is registered, a reset link has been sent."};
+  }
+  if (path === "/api/essays/types") return ESSAY_TYPES_DATA;
+  if (path === "/api/payment/plans") return PRICING_PLANS;
+  if (path === "/api/auth/login" || path === "/api/auth/register" || path === "/api/auth/reset-password") {
+    return {user:null}; // Handled directly in AuthScreen component
+  }
+  if (path === "/api/billing/checkout" || path === "/api/payment/initiate") {
+    throw new Error("Paystack integration coming soon.");
+  }
 
-  const response = await fetch(path, {
-    credentials: "include",
-    ...options,
-    headers
-  });
+  // Dynamic routes
+  if (method === "DELETE" && path.startsWith("/api/scholarships/")) {
+    const id=path.split("/").pop();
+    if(supabase) await supabase.from("scholarships").delete().eq("id",id);
+    return {ok:true};
+  }
+  if (method === "DELETE" && path.startsWith("/api/documents/")) {
+    const id=path.split("/").pop();
+    if(supabase) await supabase.from("documents").delete().eq("id",id);
+    return {ok:true};
+  }
+  if (method === "PATCH" && path.startsWith("/api/applications/")) {
+    const id=path.split("/").pop();
+    if(supabase){const{data:{user}}=await supabase.auth.getUser();if(user)await supabase.from("applications").update(body).eq("id",id).eq("user_id",user.id);}
+    return {ok:true};
+  }
+  if (method === "POST" && path === "/api/documents") {
+    if(!supabase||!body.name) throw new Error("Document name is required");
+    const{data:{user}}=await supabase.auth.getUser();
+    if(!user) throw new Error("Not authenticated");
+    const{data,error}=await supabase.from("documents").insert({user_id:user.id,name:body.name,type:body.type||"Other",size_bytes:body.size_bytes||0,storage_path:body.storage_path||""}).select().single();
+    if(error) throw new Error(error.message);
+    return {document:data};
+  }
+  if (method === "POST" && path === "/api/scholarships/bulk") {
+    if(!supabase) throw new Error("Database unavailable");
+    const items=body.scholarships||body;
+    if(Array.isArray(items)&&items.length){const{error}=await supabase.from("scholarships").insert(items);if(error)throw new Error(error.message);}
+    return {ok:true,count:Array.isArray(items)?items.length:0};
+  }
 
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(payload.error || "Request failed");
-  return payload;
-}
-
-async function getSupabaseToken() {
-  if (!supabaseClient) return "";
-  const { data } = await supabaseClient.auth.getSession();
-  return data.session?.access_token || "";
-}
-
-function configureSupabase(config) {
-  if (!config?.supabase?.configured || supabaseClient) return;
-  supabaseClient = createClient(config.supabase.url, config.supabase.anonKey);
+  throw new Error("Route not found: "+path);
 }
 
 function isPaid(user) {
@@ -137,11 +197,10 @@ function App() {
   async function bootstrap() {
     try {
       const appConfig = await api("/api/config");
-      configureSupabase(appConfig);
       setConfig(appConfig);
 
-      if (supabaseClient) {
-        const { data } = await supabaseClient.auth.getSession();
+      if (supabase) {
+        const { data } = await supabase.auth.getSession();
         if (data.session) {
           const me = await api("/api/me");
           if (me.user) {
@@ -201,7 +260,7 @@ function App() {
   }
 
   async function handleLogout() {
-    if (supabaseClient) await supabaseClient.auth.signOut();
+    if (supabase) await supabase.auth.signOut();
     await api("/api/auth/logout", { method: "POST" });
     setUser(null);
     setRows([]);
@@ -393,48 +452,31 @@ function AuthScreen({ config, initialMode = "login", onAuthed, onBackToLanding }
         return;
       }
 
-      // Try Supabase first if available
-      if (supabaseClient) {
-        try {
-          if (mode === "register") {
-            const { data, error: signUpError } = await supabaseClient.auth.signUp({
-              email: form.email,
-              password: form.password,
-              options: { data: { name: form.name, country: form.country } }
-            });
-            if (signUpError) throw signUpError;
-            if (!data.session) {
-              // Supabase requires email confirmation — skip to local auth
-              throw new Error("Email confirmation required");
-            }
-          } else {
-            const { error: signInError } =
-              await supabaseClient.auth.signInWithPassword({
-                email: form.email,
-                password: form.password
-              });
-            if (signInError) throw signInError;
-          }
-          const me = await api("/api/me");
-          onAuthed(me.user);
-          return;
-        } catch (supabaseErr) {
-          console.warn("Supabase auth failed, falling back to local auth:", supabaseErr.message);
-        }
-      }
+      // Supabase Auth
+      if (!supabase) { setError("Authentication is not available right now."); return; }
 
-      // Local auth fallback
-      const path = mode === "login" ? "/api/auth/login" : "/api/auth/register";
-      const data = await api(path, {
-        method: "POST",
-        body: JSON.stringify(form)
-      });
-      onAuthed(data.user);
-    } catch (err) {
-      if (err.message === "Failed to fetch" || err.message.includes("NetworkError")) {
-        setError("Unable to connect to the server. Please check your internet connection and try again.");
-      } else {
-        setError(err.message || "Something went wrong. Please try again.");
+      try {
+        if (mode === "register") {
+          const { data, error: signUpError } = await supabase.auth.signUp({
+            email: form.email, password: form.password,
+            options: { data: { name: form.name, country: form.country } }
+          });
+          if (signUpError) throw signUpError;
+          if (!data.session) {
+            setSuccess("Account created! Check your email to confirm, then sign in.");
+            setLoading(false);
+            return;
+          }
+        } else {
+          const { error: signInError } = await supabase.auth.signInWithPassword({
+            email: form.email, password: form.password
+          });
+          if (signInError) throw signInError;
+        }
+        const me = await api("/api/me");
+        onAuthed(me.user);
+      } catch (err) {
+        setError(err.message || "Authentication failed. Please try again.");
       }
     } finally {
       setLoading(false);
@@ -1759,9 +1801,9 @@ function DocumentsWorkspace({ user, documents, rows, onDocumentsChanged, onToast
     let fileData = "";
 
     try {
-      if (supabaseClient) {
+      if (supabase) {
         storagePath = `${user.id}/${Date.now()}-${file.name}`;
-        const { error } = await supabaseClient.storage
+        const { error } = await supabase.storage
           .from("documents")
           .upload(storagePath, file, {
             cacheControl: "3600",
