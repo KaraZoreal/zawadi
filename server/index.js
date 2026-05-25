@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import express from "express";
 import { createClient } from "@supabase/supabase-js";
 import mammoth from "mammoth";
-import { PDFParse } from "pdf-parse";
+import PDFParse from "pdf-parse";
 
 // --- Zawadi AI Modules ---
 import { aiConfigured } from "./modules/ai-client.js";
@@ -3447,8 +3447,8 @@ app.use((error, _req, res, _next) => {
 if (isProduction || process.env.VERCEL === "1") {
   // Try multiple possible locations for dist/ (Vercel bundles differently)
   let distDir = path.join(rootDir, "dist");
-  try { fs.accessSync(distDir); } catch { distDir = path.join(process.cwd(), "dist"); }
-  try { fs.accessSync(distDir); } catch { distDir = path.join("/var/task", "dist"); }
+  try { await fs.access(distDir); } catch { distDir = path.join(process.cwd(), "dist"); }
+  try { await fs.access(distDir); } catch { distDir = path.join("/var/task", "dist"); }
   console.log("Static files dir:", distDir);
 
   app.use(express.static(distDir, { fallthrough: true }));
