@@ -1,8 +1,6 @@
-// Vercel Serverless Entry Point
-// Sets VERCEL flag so the Express app skips Vite dev server + local listen
-
-process.env.VERCEL = "1";
-
+// Vercel serverless function entry point
 import app from "../server/index.js";
 
-export default app;
+export default function handler(req, res) {
+  return app(req, res);
+}

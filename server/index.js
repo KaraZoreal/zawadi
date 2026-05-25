@@ -35,7 +35,9 @@ const sessionCookie = "zawadi_session";
 const sessionMs = 1000 * 60 * 60 * 24 * 30;
 const port = Number(process.env.PORT) || 5173;
 const isProduction =
-  process.argv.includes("--production") || process.env.NODE_ENV === "production";
+  process.argv.includes("--production") ||
+  process.env.NODE_ENV === "production" ||
+  process.env.VERCEL === "1";
 
 const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const supabaseKey =
