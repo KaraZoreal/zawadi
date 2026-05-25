@@ -1,10 +1,8 @@
-// Vercel serverless entrypoint — API routes only
-// Uses CommonJS for maximum Vercel compatibility
-
-const crypto = require("crypto");
-const fs = require("fs/promises");
-const path = require("path");
-const express = require("express");
+// Vercel serverless entrypoint — API routes only (ESM)
+import crypto from "node:crypto";
+import fs from "node:fs/promises";
+import path from "node:path";
+import express from "express";
 
 const dataDir = "/tmp";
 const dbPath = path.join(dataDir, "zawadi-db.json");
@@ -77,8 +75,10 @@ app.get("/api/health", (_req, res) => res.json({ ok: true, time: nowIso() }));
 
 // --- Config ---
 app.get("/api/config", (_req, res) => {
+  const supUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+  const supKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || "";
   res.json({
-    supabase: { configured: !!(process.env.SUPABASE_URL && (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY)), url: process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || "", anonKey: process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || "" },
+    supabase: { configured: !!(supUrl && supKey), url: supUrl || "", anonKey: supKey },
     pricingPlans: [],
     countries: ["Kenya","Nigeria","Ghana","South Africa","Ethiopia","Tanzania","Uganda","Rwanda","Egypt","Senegal","Cameroon","Zimbabwe","Zambia","Malawi","Botswana","Namibia","Mauritius","Morocco","Algeria","Tunisia","Sudan","Angola","Mozambique","DR Congo","Ivory Coast","Mali","Burkina Faso","Niger","Chad","Somalia","Liberia","Sierra Leone","Gambia","Guinea","Benin","Togo","Gabon","Burundi","Djibouti","Eritrea","Eswatini","Lesotho","Madagascar","Mauritania","Seychelles","South Sudan","Cape Verde","Comoros","Sao Tome","Central African Republic","Guinea-Bissau","Congo","Equatorial Guinea","Libya","Somaliland","Western Sahara","Mayotte","Reunion","Saint Helena"]
   });
@@ -213,4 +213,4 @@ app.use((err, _req, res, _next) => {
   res.status(500).json({ error: "Something went wrong", message: err.message });
 });
 
-module.exports = app;
+export default app;
