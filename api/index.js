@@ -1,6 +1,14 @@
-// Vercel serverless function entry point
-import app from "../server/index.js";
-
+// Vercel serverless function - CommonJS format
 export default function handler(req, res) {
-  return app(req, res);
+  return res.status(200).json({
+    ok: true,
+    config: {
+      supabase: {
+        configured: false,
+        url: "",
+        anonKey: ""
+      },
+      pricingPlans: []
+    }
+  });
 }
