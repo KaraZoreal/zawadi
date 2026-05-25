@@ -404,8 +404,8 @@ function AuthScreen({ config, initialMode = "login", onAuthed, onBackToLanding }
             });
             if (signUpError) throw signUpError;
             if (!data.session) {
-              setError("Check your email to confirm your account, then sign in.");
-              return;
+              // Supabase requires email confirmation — skip to local auth
+              throw new Error("Email confirmation required");
             }
           } else {
             const { error: signInError } =
