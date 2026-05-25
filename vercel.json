@@ -1,8 +1,6 @@
 {
   "version": 2,
   "cleanUrls": true,
-  "buildCommand": "npm run build && node scripts/copy-api.cjs",
-  "outputDirectory": "dist",
   "rewrites": [
     {
       "source": "/api/(.*)",
