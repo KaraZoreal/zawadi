@@ -1,12 +1,16 @@
 import "dotenv/config";
+import { createRequire } from "node:module";
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import express from "express";
 import { createClient } from "@supabase/supabase-js";
-import mammoth from "mammoth";
-import PDFParse from "pdf-parse";
+
+// CJS modules that don't expose default exports in strict ESM (Vercel runtime)
+const _require = createRequire(import.meta.url);
+const mammoth = _require("mammoth");
+const PDFParse = _require("pdf-parse");
 
 // --- Zawadi AI Modules ---
 import { aiConfigured } from "./modules/ai-client.js";
