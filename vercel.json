@@ -1,7 +1,5 @@
 {
   "version": 2,
-  "outputDirectory": "dist",
-  "cleanUrls": true,
   "routes": [
     { "src": "/privacy", "dest": "/privacy.html" },
     { "src": "/terms", "dest": "/terms.html" },
@@ -9,6 +7,7 @@
     { "src": "/about", "dest": "/about.html" },
     { "src": "/admin", "dest": "/admin.html" },
     { "handle": "filesystem" },
+    { "src": "/assets/(.*)", "dest": "/assets/$1" },
     { "src": "/(.*)", "dest": "/index.html" }
   ]
 }
