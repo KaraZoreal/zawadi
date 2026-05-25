@@ -1,11 +1,9 @@
 {
   "version": 2,
   "cleanUrls": true,
+  "buildCommand": "npm run vercel-build",
   "rewrites": [
-    {
-      "source": "/api/(.*)",
-      "destination": "/api/index"
-    }
+    { "source": "/api/(.*)", "destination": "/api/index" }
   ],
   "routes": [
     { "src": "/privacy", "dest": "/privacy.html" },
