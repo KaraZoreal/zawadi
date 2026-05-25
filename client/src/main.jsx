@@ -461,6 +461,7 @@ function AuthScreen({ config, initialMode = "login", onAuthed, onBackToLanding }
       if (!supabase) { setError("Authentication is not available right now."); return; }
 
       try {
+        let authUser = null;
         if (mode === "register") {
           const { data, error: signUpError } = await supabase.auth.signUp({
             email: form.email, password: form.password,
@@ -472,14 +473,27 @@ function AuthScreen({ config, initialMode = "login", onAuthed, onBackToLanding }
             setLoading(false);
             return;
           }
+          authUser = data.user;
         } else {
-          const { error: signInError } = await supabase.auth.signInWithPassword({
+          const { data, error: signInError } = await supabase.auth.signInWithPassword({
             email: form.email, password: form.password
           });
           if (signInError) throw signInError;
+          authUser = data.user;
         }
-        const me = await api("/api/me");
-        onAuthed(me.user);
+
+        // Build user directly from auth response — avoid timing gap of api("/api/me")
+        const nextUser = {
+          id: authUser.id,
+          email: authUser.email,
+          name: authUser.user_metadata?.name || form.name || "",
+          country: authUser.user_metadata?.country || form.country || "Kenya",
+          plan: "free",
+          planName: "Explorer",
+          is_paid: false,
+          role: "user"
+        };
+        onAuthed(nextUser);
       } catch (err) {
         setError(err.message || "Authentication failed. Please try again.");
       }
