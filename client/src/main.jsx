@@ -1,4 +1,4 @@
-import React from "react";
+import React, { Suspense, lazy } from "react";
 import { createRoot } from "react-dom/client";
 import { createClient } from "@supabase/supabase-js";
 import {
@@ -35,12 +35,12 @@ import {
 } from "lucide-react";
 import "./styles.css";
 
-// --- Techsari Zawadi AI Components ---
-import EssayGenerator from "./components/EssayGenerator.jsx";
-import ApplicationCenter from "./components/ApplicationCenter.jsx";
-import IntelligencePanel from "./components/IntelligencePanel.jsx";
-import UpgradeModal from "./components/UpgradeModal.jsx";
-import LandingPage from "./components/LandingPage.jsx";
+// --- Techsari Zawadi AI Components (lazy loaded) ---
+const EssayGenerator = lazy(() => import("./components/EssayGenerator.jsx"));
+const ApplicationCenter = lazy(() => import("./components/ApplicationCenter.jsx"));
+const IntelligencePanel = lazy(() => import("./components/IntelligencePanel.jsx"));
+const UpgradeModal = lazy(() => import("./components/UpgradeModal.jsx"));
+const LandingPage = lazy(() => import("./components/LandingPage.jsx"));
 
 let supabaseClient = null;
 
@@ -212,16 +212,18 @@ function App() {
   if (!user) {
     if (showLanding) {
       return (
-        <LandingPage
-          onGetStarted={() => {
-            setAuthMode("register");
-            setShowLanding(false);
-          }}
-          onLogin={() => {
-            setAuthMode("login");
-            setShowLanding(false);
-          }}
-        />
+        <Suspense fallback={<BootScreen />}>
+          <LandingPage
+            onGetStarted={() => {
+              setAuthMode("register");
+              setShowLanding(false);
+            }}
+            onLogin={() => {
+              setAuthMode("login");
+              setShowLanding(false);
+            }}
+          />
+        </Suspense>
       );
     }
     return (
@@ -663,33 +665,39 @@ function Portal({
         )}
 
         {view === "application-center" && (
-          <ApplicationCenter
-            api={api}
-            rows={rows}
-            user={user}
-            onToast={onToast}
-            onRefresh={onRefresh}
-            onUpgrade={() => setUpgradeOpen(true)}
-          />
+          <Suspense fallback={<BootScreen />}>
+            <ApplicationCenter
+              api={api}
+              rows={rows}
+              user={user}
+              onToast={onToast}
+              onRefresh={onRefresh}
+              onUpgrade={() => setUpgradeOpen(true)}
+            />
+          </Suspense>
         )}
 
         {view === "essay-generator" && (
-          <EssayGenerator
-            api={api}
-            scholarships={rows}
-            user={user}
-            onToast={onToast}
-            onUpgrade={() => setUpgradeOpen(true)}
-          />
+          <Suspense fallback={<BootScreen />}>
+            <EssayGenerator
+              api={api}
+              scholarships={rows}
+              user={user}
+              onToast={onToast}
+              onUpgrade={() => setUpgradeOpen(true)}
+            />
+          </Suspense>
         )}
 
         {view === "intelligence" && (
-          <IntelligencePanel
-            api={api}
-            documents={documents}
-            onToast={onToast}
-            onDocumentsChanged={onDocumentsChanged}
-          />
+          <Suspense fallback={<BootScreen />}>
+            <IntelligencePanel
+              api={api}
+              documents={documents}
+              onToast={onToast}
+              onDocumentsChanged={onDocumentsChanged}
+            />
+          </Suspense>
         )}
       </section>
 
@@ -719,13 +727,15 @@ function Portal({
       )}
 
       {upgradeOpen && (
-        <UpgradeModal
-          plans={upgradePlans}
-          user={user}
-          onClose={() => setUpgradeOpen(false)}
-          onUpgrade={handleUpgrade}
-          onToast={onToast}
-        />
+        <Suspense fallback={null}>
+          <UpgradeModal
+            plans={upgradePlans}
+            user={user}
+            onClose={() => setUpgradeOpen(false)}
+            onUpgrade={handleUpgrade}
+            onToast={onToast}
+          />
+        </Suspense>
       )}
     </main>
   );

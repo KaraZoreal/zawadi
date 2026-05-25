@@ -88,6 +88,7 @@ function rateLimit({ windowMs = 60_000, limit = 30 } = {}) {
 const sensitiveApiLimiter = rateLimit({ windowMs: 60_000, limit: 20 });
 const generationLimiter = rateLimit({ windowMs: 60_000, limit: 8 });
 
+app.use((req, _res, next) => { trackRequest(); next(); });
 app.use(
   ["/api/auth", "/api/billing", "/api/payment", "/api/admin/login"],
   sensitiveApiLimiter
@@ -433,10 +434,12 @@ async function createSeedDb() {
     essayPreferences: {},
     usageTracking: {},
     passwordResets: [],
-    notifications: [],
-    payments: []
-  };
-}
+      notifications: [],
+      payments: [],
+      auditLog: [],
+      metrics: { requests: 0, errors: 0, startTime: nowIso() }
+    };
+  }
 
 async function loadDb() {
   await fs.mkdir(dataDir, { recursive: true });
@@ -457,6 +460,8 @@ async function loadDb() {
     db.usageTracking ||= {};
     db.notifications ||= [];
     db.payments ||= [];
+    db.auditLog ||= [];
+    db.metrics ||= { requests: 0, errors: 0, startTime: nowIso() };
     db.users = db.users.map(normalizeUser);
     db.scholarships = db.scholarships.map(normalizeScholarship);
     const existingScholarshipIds = new Set(db.scholarships.map((row) => row.id));
@@ -685,6 +690,31 @@ function sanitizeScholarship(input, userId) {
       source: input.source || "Manual upload"
     })
   };
+}
+
+function addAuditLog(db, entry) {
+  if (!db.auditLog) db.auditLog = [];
+  db.auditLog.push({
+    id: crypto.randomUUID(),
+    timestamp: nowIso(),
+    adminId: entry.adminId,
+    adminEmail: entry.adminEmail || "",
+    action: entry.action,
+    resource: entry.resource,
+    resourceId: entry.resourceId || "",
+    before: entry.before || null,
+    after: entry.after || null,
+    ip: entry.ip || "",
+    userAgent: entry.userAgent || ""
+  });
+}
+
+const metricsStore = { requests: 0, errors: 0, startTime: nowIso() };
+function trackRequest() { metricsStore.requests++; }
+function trackError() { metricsStore.errors++; }
+function getMetrics() {
+  const uptime = Math.floor((Date.now() - new Date(metricsStore.startTime).getTime()) / 1000);
+  return { ...metricsStore, uptime };
 }
 
 function defaultApplication(userId, scholarshipId) {
@@ -1052,6 +1082,30 @@ async function requireAuth(req, res, next) {
   }
 }
 
+app.get("/api/security", (_req, res) => {
+  res.json({
+    encryption: {
+      atRest: "Data stored in Supabase PostgreSQL is encrypted at rest using AES-256. File uploads in Supabase Storage use server-side encryption with AES-256. Local development JSON file storage is not encrypted at rest.",
+      inTransit: "All API traffic uses TLS 1.2+ when served over HTTPS. Local development traffic is unencrypted.",
+      keys: "Encryption keys are managed by the cloud provider (Supabase). No customer-managed keys are used."
+    },
+    authentication: "Supabase Auth with JWT tokens. Sessions use httpOnly, sameSite=lax cookies with optional secure flag.",
+    storage: "Production: Supabase private storage buckets with RLS policies. Development: local filesystem.",
+    recommendations: "Enable Supabase RLS on all tables. Use SUPABASE_SERVICE_ROLE_KEY only server-side. Add row-level security for user-owned data."
+  });
+});
+
+app.get("/api/monitor", requireAuth, requireAdmin, (_req, res) => {
+  res.json(getMetrics());
+});
+
+app.get("/api/audit-log", requireAuth, requireAdmin, (req, res) => {
+  const limit = Math.min(Number(req.query.limit) || 100, 500);
+  const offset = Number(req.query.offset) || 0;
+  const entries = (req.db.auditLog || []).slice(offset, offset + limit);
+  res.json({ entries, total: (req.db.auditLog || []).length });
+});
+
 app.get("/api/health", (_req, res) => {
   res.json({
     ok: true,
@@ -1368,7 +1422,7 @@ app.get("/api/scholarships", requireAuth, (req, res) => {
   });
 });
 
-app.post("/api/scholarships", requireAuth, async (req, res, next) => {
+app.post("/api/scholarships", requireAuth, requireAdmin, async (req, res, next) => {
   try {
     const scholarship = sanitizeScholarship(req.body, req.user.id);
     req.db.scholarships.unshift(scholarship);
@@ -1388,7 +1442,7 @@ app.post("/api/scholarships", requireAuth, async (req, res, next) => {
   }
 });
 
-app.post("/api/scholarships/bulk", requireAuth, async (req, res, next) => {
+app.post("/api/scholarships/bulk", requireAuth, requireAdmin, async (req, res, next) => {
   try {
     const rows = Array.isArray(req.body.scholarships) ? req.body.scholarships : [];
     if (!rows.length) {
@@ -1452,7 +1506,7 @@ app.post("/api/scholarships/bulk", requireAuth, async (req, res, next) => {
   }
 });
 
-app.patch("/api/scholarships/:id", requireAuth, async (req, res, next) => {
+app.patch("/api/scholarships/:id", requireAuth, requireAdmin, async (req, res, next) => {
   try {
     const index = req.db.scholarships.findIndex((row) => row.id === req.params.id);
     if (index === -1) {
@@ -1476,7 +1530,7 @@ app.patch("/api/scholarships/:id", requireAuth, async (req, res, next) => {
   }
 });
 
-app.delete("/api/scholarships/:id", requireAuth, async (req, res, next) => {
+app.delete("/api/scholarships/:id", requireAuth, requireAdmin, async (req, res, next) => {
   try {
     const before = req.db.scholarships.length;
     req.db.scholarships = req.db.scholarships.filter((row) => row.id !== req.params.id);
@@ -2858,6 +2912,16 @@ app.patch("/api/admin/users/:id", requireAuth, requireAdmin, async (req, res, ne
     if (req.body.subscriptionRenewsAt !== undefined) user.subscriptionRenewsAt = text(req.body.subscriptionRenewsAt);
     if (req.body.trialEndsAt !== undefined) user.trialEndsAt = text(req.body.trialEndsAt);
 
+    addAuditLog(req.db, {
+      adminId: req.user.id,
+      adminEmail: req.user.email,
+      action: "update_user",
+      resource: "user",
+      resourceId: user.id,
+      after: { name: user.name, email: user.email, plan: user.plan, role: user.role },
+      ip: req.ip,
+      userAgent: req.headers["user-agent"]
+    });
     await saveDb(req.db);
     res.json({ ok: true, user: serializeUser(normalizeUser(user)) });
   } catch (error) {
@@ -2880,6 +2944,15 @@ app.delete("/api/admin/users/:id", requireAuth, requireAdmin, async (req, res, n
     req.db.applications = req.db.applications.filter(a => a.userId !== userId);
     req.db.documents = req.db.documents.filter(d => d.userId !== userId);
     req.db.payments = (req.db.payments || []).filter(p => p.userId !== userId);
+    addAuditLog(req.db, {
+      adminId: req.user.id,
+      adminEmail: req.user.email,
+      action: "delete_user",
+      resource: "user",
+      resourceId: userId,
+      ip: req.ip,
+      userAgent: req.headers["user-agent"]
+    });
     await saveDb(req.db);
     res.json({ ok: true });
   } catch (error) {
@@ -2920,6 +2993,16 @@ app.patch("/api/admin/subscriptions/:id", requireAuth, requireAdmin, async (req,
       user.is_paid = true;
     }
 
+    addAuditLog(req.db, {
+      adminId: req.user.id,
+      adminEmail: req.user.email,
+      action: "update_subscription",
+      resource: "subscription",
+      resourceId: user.id,
+      after: { name: user.name, plan: user.plan, planStatus: user.planStatus, is_paid: user.is_paid },
+      ip: req.ip,
+      userAgent: req.headers["user-agent"]
+    });
     await saveDb(req.db);
     res.json({ ok: true, user: serializeUser(normalizeUser(user)) });
   } catch (error) {
@@ -2968,6 +3051,16 @@ app.post("/api/admin/scholarships", requireAuth, requireAdmin, async (req, res, 
       title: scholarship.name,
       createdAt: nowIso()
     });
+    addAuditLog(req.db, {
+      adminId: req.user.id,
+      adminEmail: req.user.email,
+      action: "create_scholarship",
+      resource: "scholarship",
+      resourceId: scholarship.id,
+      after: { name: scholarship.name, provider: scholarship.provider },
+      ip: req.ip,
+      userAgent: req.headers["user-agent"]
+    });
     await saveDb(req.db);
     res.status(201).json({ scholarship });
   } catch (error) {
@@ -3006,6 +3099,15 @@ app.post("/api/admin/scholarships/bulk", requireAuth, requireAdmin, async (req, 
         title: `${added} scholarships added via bulk import`,
         createdAt: nowIso()
       });
+      addAuditLog(req.db, {
+        adminId: req.user.id,
+        adminEmail: req.user.email,
+        action: "bulk_import_scholarships",
+        resource: "scholarship",
+        after: { count: added, skipped },
+        ip: req.ip,
+        userAgent: req.headers["user-agent"]
+      });
       await saveDb(req.db);
     }
     res.json({ ok: true, added, skipped });
@@ -3039,6 +3141,17 @@ app.patch("/api/admin/scholarships/:id", requireAuth, requireAdmin, async (req, 
     }
 
     req.db.scholarships[index] = updated;
+    addAuditLog(req.db, {
+      adminId: req.user.id,
+      adminEmail: req.user.email,
+      action: "update_scholarship",
+      resource: "scholarship",
+      resourceId: updated.id,
+      before: { name: req.db.scholarships[index].name, verifiedAt: req.db.scholarships[index].verifiedAt },
+      after: { name: updated.name, verifiedAt: updated.verifiedAt },
+      ip: req.ip,
+      userAgent: req.headers["user-agent"]
+    });
     await saveDb(req.db);
     res.json({ scholarship: updated });
   } catch (error) {
@@ -3064,6 +3177,16 @@ app.post("/api/admin/scholarships/:id/verify", requireAuth, requireAdmin, async 
       title: scholarship.name,
       createdAt: nowIso()
     });
+    addAuditLog(req.db, {
+      adminId: req.user.id,
+      adminEmail: req.user.email,
+      action: "verify_scholarship",
+      resource: "scholarship",
+      resourceId: scholarship.id,
+      after: { name: scholarship.name, verifiedAt: scholarship.verifiedAt },
+      ip: req.ip,
+      userAgent: req.headers["user-agent"]
+    });
     await saveDb(req.db);
     res.json({ ok: true, scholarship });
   } catch (error) {
@@ -3081,6 +3204,16 @@ app.post("/api/admin/scholarships/:id/unverify", requireAuth, requireAdmin, asyn
     }
     scholarship.verifiedAt = "";
     scholarship.updatedAt = nowIso();
+    addAuditLog(req.db, {
+      adminId: req.user.id,
+      adminEmail: req.user.email,
+      action: "unverify_scholarship",
+      resource: "scholarship",
+      resourceId: scholarship.id,
+      after: { name: scholarship.name, verifiedAt: "" },
+      ip: req.ip,
+      userAgent: req.headers["user-agent"]
+    });
     await saveDb(req.db);
     res.json({ ok: true, scholarship });
   } catch (error) {
@@ -3099,6 +3232,15 @@ app.delete("/api/admin/scholarships/:id", requireAuth, requireAdmin, async (req,
     }
     req.db.applications = req.db.applications.filter((row) => row.scholarshipId !== req.params.id);
     req.db.notifications = req.db.notifications.filter((row) => row.scholarshipId !== req.params.id);
+    addAuditLog(req.db, {
+      adminId: req.user.id,
+      adminEmail: req.user.email,
+      action: "delete_scholarship",
+      resource: "scholarship",
+      resourceId: req.params.id,
+      ip: req.ip,
+      userAgent: req.headers["user-agent"]
+    });
     await saveDb(req.db);
     res.json({ ok: true });
   } catch (error) {
@@ -3107,6 +3249,7 @@ app.delete("/api/admin/scholarships/:id", requireAuth, requireAdmin, async (req,
 });
 
 app.use((error, _req, res, _next) => {
+  trackError();
   console.error(error);
   res.status(500).json({ error: "Something went wrong inside Zawadi" });
 });

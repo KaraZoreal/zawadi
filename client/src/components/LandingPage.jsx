@@ -163,9 +163,9 @@ export default function LandingPage({ onGetStarted, onLogin }) {
               <em> actually eligible for</em>
             </h1>
             <p>
-              Techsari's Zawadi portal scans hundreds of funding opportunities,
-              matches them to your profile, and helps you apply — all from one
-              premium dashboard. Stop chasing dead ends. Start winning scholarships.
+              Zawadi scans hundreds of funding opportunities, matches them to your
+              profile, and helps you apply — all from one dashboard. Stop chasing
+              dead ends. Start winning scholarships.
             </p>
             <div className="landing-hero-actions">
               <button className="primary-btn large" type="button" onClick={onGetStarted}>
@@ -417,7 +417,8 @@ export default function LandingPage({ onGetStarted, onLogin }) {
             </a>
             <p>
               An AI-powered scholarship matching and application management
-              platform built for African students.
+              platform built for African students. Your scholarship journey — from
+              discovery to acceptance, all in one place.
             </p>
           </div>
           <div className="landing-footer-col">
