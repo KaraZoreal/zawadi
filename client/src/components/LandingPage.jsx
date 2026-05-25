@@ -434,10 +434,16 @@ export default function LandingPage({ onGetStarted, onLogin }) {
             <a href="#pricing">FAQ</a>
           </div>
           <div className="landing-footer-col">
+            <h4>Legal</h4>
+            <a href="/privacy">Privacy Policy</a>
+            <a href="/terms">Terms of Service</a>
+            <a href="mailto:privacy@techsari.online">Data Requests</a>
+          </div>
+          <div className="landing-footer-col">
             <h4>Company</h4>
             <a href="#features">About Techsari</a>
             <a href="mailto:hello@techsari.africa">Contact</a>
-            <a href="#pricing">Plans and privacy</a>
+            <a href="#pricing">Plans</a>
           </div>
         </div>
         <div className="landing-footer-bottom">

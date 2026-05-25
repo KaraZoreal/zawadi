@@ -59,6 +59,36 @@ const app = express();
 
 app.disable("x-powered-by");
 app.use((req, res, next) => {
+  // CORS - restrict to known origins in production
+  const origin = req.headers.origin || "";
+  const allowedOrigins = [
+    "https://www.techsari.online",
+    "https://techsari.online",
+    "http://localhost:5173",
+    "http://127.0.0.1:5173"
+  ];
+
+  if (isProduction && origin) {
+    if (allowedOrigins.includes(origin)) {
+      res.setHeader("Access-Control-Allow-Origin", origin);
+    }
+    // In production, only allow known origins; reject others implicitly
+  } else {
+    // Development: allow localhost
+    res.setHeader("Access-Control-Allow-Origin", origin || "*");
+  }
+
+  res.setHeader("Access-Control-Allow-Credentials", "true");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+
+  // Handle preflight
+  if (req.method === "OPTIONS") {
+    res.status(204).end();
+    return;
+  }
+
+  // Security headers
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("X-Frame-Options", "DENY");
   res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
@@ -3282,6 +3312,93 @@ app.delete("/api/admin/scholarships/:id", requireAuth, requireAdmin, async (req,
   }
 });
 
+// Account deletion & data export (GDPR / DPA compliance)
+app.delete("/api/me", requireAuth, async (req, res, next) => {
+  try {
+    const db = await loadDb();
+    const userId = req.user.id;
+
+    // Remove user
+    db.users = db.users.filter((user) => user.id !== userId);
+    // Remove sessions
+    db.sessions = db.sessions.filter((session) => session.userId !== userId);
+    // Remove applications
+    db.applications = db.applications.filter((app) => app.userId !== userId);
+    // Remove documents
+    db.documents = db.documents.filter((doc) => doc.userId !== userId);
+    // Remove essay data
+    db.essaySamples = db.essaySamples.filter((sample) => sample.userId !== userId);
+    db.essayEditHistory = db.essayEditHistory.filter((edit) => edit.userId !== userId);
+    if (db.essayPreferences?.[userId]) delete db.essayPreferences[userId];
+    // Remove learning data
+    db.learningLog = db.learningLog.filter((log) => log.userId !== userId);
+    // Remove alerts
+    db.alerts = db.alerts.filter((alert) => alert.userId !== userId);
+    // Remove notifications
+    db.notifications = db.notifications.filter((notif) => notif.userId !== userId);
+    // Remove usage tracking
+    if (db.usageTracking?.[userId]) delete db.usageTracking[userId];
+    // Keep payment records for tax compliance (requirements)
+
+    // Audit log
+    db.auditLog = db.auditLog || [];
+    db.auditLog.push({
+      id: crypto.randomUUID(),
+      userId,
+      action: "account.deleted",
+      timestamp: nowIso()
+    });
+
+    await saveDb(db);
+
+    // Clear session cookie
+    res.clearCookie(sessionCookie);
+
+    res.json({ ok: true, message: "Your account and all associated data have been deleted. Payment records are retained for 7 years per tax requirements." });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Data export (GDPR right to access / data portability)
+app.get("/api/me/export", requireAuth, async (req, res, next) => {
+  try {
+    const db = await loadDb();
+    const userId = req.user.id;
+
+    const exportData = {
+      exportedAt: nowIso(),
+      user: db.users.find((user) => user.id === userId),
+      applications: db.applications.filter((app) => app.userId === userId),
+      documents: db.documents.filter((doc) => doc.userId === userId),
+      essaySamples: db.essaySamples.filter((sample) => sample.userId === userId),
+      essayPreferences: db.essayPreferences?.[userId] || {},
+      learningLog: db.learningLog.filter((log) => log.userId === userId),
+      payments: db.payments.filter((payment) => payment.userId === userId),
+      usageTracking: db.usageTracking?.[userId] || {}
+    };
+
+    // Strip password hash from export
+    if (exportData.user) {
+      delete exportData.user.passwordHash;
+    }
+
+    // Audit log
+    db.auditLog = db.auditLog || [];
+    db.auditLog.push({
+      id: crypto.randomUUID(),
+      userId,
+      action: "data.exported",
+      timestamp: nowIso()
+    });
+    await saveDb(db);
+
+    res.json(exportData);
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.use((error, _req, res, _next) => {
   trackError();
   console.error(error);
@@ -3296,6 +3413,14 @@ if (isProduction || process.env.VERCEL === "1") {
   // Admin page at /admin
   app.get("/admin", (_req, res) => {
     res.sendFile(path.join(distDir, "admin.html"));
+  });
+
+  // Privacy Policy & Terms of Service
+  app.get("/privacy", (_req, res) => {
+    res.sendFile(path.join(distDir, "privacy.html"));
+  });
+  app.get("/terms", (_req, res) => {
+    res.sendFile(path.join(distDir, "terms.html"));
   });
 
   // SPA fallback — return index.html for all non-API routes
@@ -3314,6 +3439,14 @@ if (isProduction || process.env.VERCEL === "1") {
   // Admin page in dev mode
   app.get("/admin", (_req, res) => {
     res.sendFile(path.join(rootDir, "public", "admin.html"));
+  });
+
+  // Privacy Policy & Terms of Service in dev mode
+  app.get("/privacy", (_req, res) => {
+    res.sendFile(path.join(rootDir, "public", "privacy.html"));
+  });
+  app.get("/terms", (_req, res) => {
+    res.sendFile(path.join(rootDir, "public", "terms.html"));
   });
 
   app.use(vite.middlewares);
