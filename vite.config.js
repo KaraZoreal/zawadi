@@ -10,12 +10,12 @@ export default defineConfig({
   server: {
     host: "127.0.0.1",
     port: 5173,
-    // Proxy API calls to the admin backend server
+    // Proxy API calls to the backend Express server
     proxy: {
       '/api': {
-        target: 'http://localhost:5174',
+        target: 'http://localhost:3001',
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api/, '/api')
+        ws: true
       }
     }
   }

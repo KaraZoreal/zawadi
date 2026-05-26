@@ -779,6 +779,13 @@ async function apiCall(path, options = {}) {
     "Content-Type": "application/json",
     ...(options.headers || {})
   };
+  
+  // Add authorization token if user is logged in
+  const token = localStorage.getItem('zawadi:admin_token');
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+  
   const response = await fetch(path, {
     credentials: "include",
     ...options,
@@ -895,15 +902,27 @@ async function handleLogin(event) {
       })
     });
     state.user = data.user;
+    
+    // Store JWT token from session for subsequent requests
+    if (data.session?.access_token) {
+      localStorage.setItem('zawadi:admin_token', data.session.access_token);
+    }
+    
     await loadDashboard();
   } catch (error) {
     state.loading = false;
+    localStorage.removeItem('zawadi:admin_token');
     renderLogin(error.message);
   }
 }
 
 async function handleLogout() {
-  await apiCall("/api/auth/logout", { method: "POST" }).catch(() => {});
+  try {
+    await apiCall("/api/user/profile", { method: "GET" }).catch(() => {});
+  } catch (e) {
+    // Expected to fail, we're logging out
+  }
+  localStorage.removeItem('zawadi:admin_token');
   state.user = null;
   state.dashboard = null;
   renderLogin();
@@ -1612,7 +1631,7 @@ async function saveScholarship(event, row) {
 
 async function verifyScholarship(row) {
   try {
-    await apiCall(`/api/admin/scholarships/${row.id}/verify`, { method: "POST" });
+    await apiCall(`/api/admin/scholarships/${row.id}/publish`, { method: "PATCH" });
     showToast("Scholarship published — users can now see it");
     await loadDashboard();
   } catch (error) {
@@ -1623,7 +1642,7 @@ async function verifyScholarship(row) {
 async function unverifyScholarship(row) {
   if (!window.confirm(`Unpublish "${row.name}"? It will be hidden from users until you publish it again.`)) return;
   try {
-    await apiCall(`/api/admin/scholarships/${row.id}/unverify`, { method: "POST" });
+    await apiCall(`/api/admin/scholarships/${row.id}/unpublish`, { method: "PATCH" });
     showToast("Scholarship unpublished");
     await loadDashboard();
   } catch (error) {
