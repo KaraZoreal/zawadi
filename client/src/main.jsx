@@ -96,7 +96,9 @@ async function api(path, options = {}) {
     if(!au) return {user:null};
     let pr=null;
     try{const r=await supabase.from("user_profiles").select("*").eq("id",au.id).maybeSingle();pr=r.data;}catch{/* table may not exist yet — use auth metadata */};
-    return {user:{id:au.id,email:au.email,name:pr?.name||au.user_metadata?.name||"",country:pr?.country||au.user_metadata?.country||"Kenya",plan:pr?.plan||"free",planName:pr?.plan==="plus"?"Plus":pr?.plan==="pro"?"Pro":pr?.plan==="mentor"?"Mentor":"Explorer",is_paid:!!(pr?.plan&&pr.plan!=="free"),role:"user"}};
+    const country = pr?.country||au.user_metadata?.country||"Kenya";
+    const profile = { country, targetLevel: pr?.targetLevel || "Undergraduate", fieldInterests: pr?.fieldInterests || [], studyCountries: pr?.studyCountries || [] };
+    return {user:{id:au.id,email:au.email,name:pr?.name||au.user_metadata?.name||"",country,plan:pr?.plan||"free",planName:pr?.plan==="plus"?"Plus":pr?.plan==="pro"?"Pro":pr?.plan==="mentor"?"Mentor":"Explorer",is_paid:!!(pr?.plan&&pr.plan!=="free"),role:"user",profile}};
   }
   if (path === "/api/scholarships" || path === "/api/scholarships/filtered") {
     if(!supabase) return {scholarships:[],stats:emptyStats(),documents:[]};
@@ -203,6 +205,13 @@ function App() {
     try {
       const appConfig = await api("/api/config");
       setConfig(appConfig);
+
+      const hash = window.location.hash;
+      if (hash && hash.includes("type=recovery")) {
+        // Prevent auto-login and render auth screen in reset mode
+        setBooting(false);
+        return;
+      }
 
       if (supabase) {
         const { data } = await supabase.auth.getSession();
@@ -408,8 +417,12 @@ function AuthScreen({ config, initialMode = "login", onAuthed, onBackToLanding }
   React.useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const token = params.get("token");
+    const hash = window.location.hash;
+
     if (token) {
       setForm((prev) => ({ ...prev, resetToken: token }));
+      setMode("reset");
+    } else if (hash && hash.includes("type=recovery")) {
       setMode("reset");
     } else {
       setMode(initialMode);
@@ -442,17 +455,26 @@ function AuthScreen({ config, initialMode = "login", onAuthed, onBackToLanding }
           setError("Passwords do not match");
           return;
         }
-        const data = await api("/api/auth/reset-password", {
-          method: "POST",
-          body: JSON.stringify({
-            token: form.resetToken,
-            newPassword: form.newPassword
-          })
-        });
-        setSuccess(data.message);
+        if (supabase) {
+          const { error: resetError } = await supabase.auth.updateUser({
+            password: form.newPassword
+          });
+          if (resetError) throw resetError;
+          setSuccess("Password updated successfully. You can now sign in.");
+        } else {
+          const data = await api("/api/auth/reset-password", {
+            method: "POST",
+            body: JSON.stringify({
+              token: form.resetToken,
+              newPassword: form.newPassword
+            })
+          });
+          setSuccess(data.message);
+        }
         setTimeout(() => {
           setMode("login");
           setSuccess("");
+          window.location.hash = ""; // Clear hash
         }, 4000);
         return;
       }
@@ -468,6 +490,9 @@ function AuthScreen({ config, initialMode = "login", onAuthed, onBackToLanding }
             options: { data: { name: form.name, country: form.country } }
           });
           if (signUpError) throw signUpError;
+          if (data.user && data.user.identities && data.user.identities.length === 0) {
+            throw new Error("An account with this email already exists. Please sign in.");
+          }
           if (!data.session) {
             setSuccess("Account created! Check your email to confirm, then sign in.");
             setLoading(false);
@@ -483,15 +508,17 @@ function AuthScreen({ config, initialMode = "login", onAuthed, onBackToLanding }
         }
 
         // Build user directly from auth response — avoid timing gap of api("/api/me")
+        const userCountry = authUser.user_metadata?.country || form.country || "Kenya";
         const nextUser = {
           id: authUser.id,
           email: authUser.email,
           name: authUser.user_metadata?.name || form.name || "",
-          country: authUser.user_metadata?.country || form.country || "Kenya",
+          country: userCountry,
           plan: "free",
           planName: "Explorer",
           is_paid: false,
-          role: "user"
+          role: "user",
+          profile: { country: userCountry, targetLevel: "Undergraduate", fieldInterests: [], studyCountries: [] }
         };
         onAuthed(nextUser);
       } catch (err) {
@@ -1243,12 +1270,12 @@ function inferClientCategories(row) {
 }
 
 function ProfileCard({ user, onUserChanged, onRefresh, onToast }) {
-  const [profile, setProfile] = React.useState(user.profile);
+  const [profile, setProfile] = React.useState(user.profile || { country: user.country, targetLevel: "Undergraduate", fieldInterests: [], studyCountries: [] });
   const [saving, setSaving] = React.useState(false);
 
   React.useEffect(() => {
-    setProfile(user.profile);
-  }, [user.profile]);
+    setProfile(user.profile || { country: user.country, targetLevel: "Undergraduate", fieldInterests: [], studyCountries: [] });
+  }, [user.profile, user.country]);
 
   async function saveProfile(event) {
     event.preventDefault();
@@ -1338,7 +1365,7 @@ function ScholarshipWorkspace({
   const [filters, setFilters] = React.useState({
     query: "",
     country: "All countries",
-    applicantCountry: user.profile.country || user.country,
+    applicantCountry: user.profile?.country || user.country,
     level: "All levels",
     category: selectedCategory || "All categories",
     status: "All statuses",
