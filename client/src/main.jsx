@@ -277,6 +277,40 @@ async function api(path, options = {}) {
     };
   }
 
+  // Admin scholarship verify/unverify endpoints
+  if (method === "POST" && path.match(/\/api\/admin\/scholarships\/[^/]+\/verify$/)) {
+    if (!supabase) throw new Error("Database unavailable");
+    const adminToken = typeof window !== 'undefined' ? window.localStorage.getItem('zawadi:adminToken') : null;
+    if (!adminToken) throw new Error("Admin authentication required");
+    const id = path.split("/")[4];
+    const {error} = await supabase.from("scholarships").update({published: true, verifiedAt: new Date().toISOString()}).eq("id", id);
+    if (error) throw new Error(error.message);
+    return {ok: true};
+  }
+
+  if (method === "POST" && path.match(/\/api\/admin\/scholarships\/[^/]+\/unverify$/)) {
+    if (!supabase) throw new Error("Database unavailable");
+    const adminToken = typeof window !== 'undefined' ? window.localStorage.getItem('zawadi:adminToken') : null;
+    if (!adminToken) throw new Error("Admin authentication required");
+    const id = path.split("/")[4];
+    const {error} = await supabase.from("scholarships").update({published: false, verifiedAt: null}).eq("id", id);
+    if (error) throw new Error(error.message);
+    return {ok: true};
+  }
+
+  // Admin bulk import endpoint
+  if (method === "POST" && path === "/api/admin/scholarships/bulk") {
+    if (!supabase) throw new Error("Database unavailable");
+    const adminToken = typeof window !== 'undefined' ? window.localStorage.getItem('zawadi:adminToken') : null;
+    if (!adminToken) throw new Error("Admin authentication required");
+    const items = body.scholarships || body;
+    if (Array.isArray(items) && items.length) {
+      const {error} = await supabase.from("scholarships").insert(items.map(i => ({...i, published: false})));
+      if (error) throw new Error(error.message);
+    }
+    return {ok: true, added: Array.isArray(items) ? items.length : 0, skipped: 0};
+  }
+
   // Update scholarship published status
   if (method === "PATCH" && path.startsWith("/api/scholarships/")) {
     if (!supabase) throw new Error("Database unavailable");
@@ -286,8 +320,6 @@ async function api(path, options = {}) {
     return {ok: true};
   }
 
-  throw new Error("Route not found: "+path);
-}
   if (path === "/api/billing/checkout" || path === "/api/payment/initiate") {
     throw new Error("Paystack integration coming soon.");
   }
@@ -295,6 +327,13 @@ async function api(path, options = {}) {
   // Dynamic routes
   if (method === "DELETE" && path.startsWith("/api/scholarships/")) {
     const id=path.split("/").pop();
+    if(supabase) await supabase.from("scholarships").delete().eq("id",id);
+    return {ok:true};
+  }
+  if (method === "DELETE" && path.startsWith("/api/admin/scholarships/")) {
+    const adminToken = typeof window !== 'undefined' ? window.localStorage.getItem('zawadi:adminToken') : null;
+    if (!adminToken) throw new Error("Admin authentication required");
+    const id=path.split("/")[4];
     if(supabase) await supabase.from("scholarships").delete().eq("id",id);
     return {ok:true};
   }
