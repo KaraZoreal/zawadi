@@ -2,6 +2,7 @@ import express from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import { supabaseAdmin } from '../../config.js';
 import { logAuditAction } from '../../services/audit.js';
+import { eventEmitter } from '../../services/events.js';
 
 const router = express.Router();
 
@@ -86,6 +87,9 @@ router.patch('/:id/publish', async (req, res) => {
       ip_address: req.ip
     });
 
+    // Emit real-time event
+    eventEmitter.publishScholarshipUpdate(id, 'publish', data[0]);
+
     res.json(data[0]);
   } catch (err) {
     console.error('[PUBLISH_ERROR]', err);
@@ -127,6 +131,9 @@ router.patch('/:id/unpublish', async (req, res) => {
       after_values: { published: false },
       ip_address: req.ip
     });
+
+    // Emit real-time event
+    eventEmitter.publishScholarshipUpdate(id, 'unpublish', data[0]);
 
     res.json(data[0]);
   } catch (err) {
