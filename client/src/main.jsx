@@ -96,7 +96,20 @@ async function api(path, options = {}) {
     if(!au) return {user:null};
     let pr=null;
     try{const r=await supabase.from("user_profiles").select("*").eq("id",au.id).maybeSingle();pr=r.data;}catch{/* table may not exist yet — use auth metadata */};
-    return {user:{id:au.id,email:au.email,name:pr?.name||au.user_metadata?.name||"",country:pr?.country||au.user_metadata?.country||"Kenya",plan:pr?.plan||"free",planName:pr?.plan==="plus"?"Plus":pr?.plan==="pro"?"Pro":pr?.plan==="mentor"?"Mentor":"Explorer",is_paid:!!(pr?.plan&&pr.plan!=="free"),role:"user"}};
+    
+    const metadata = au.user_metadata || {};
+    const profile = metadata.profile || {
+      country: pr?.country || metadata.country || "Kenya",
+      targetLevel: "Masters",
+      fieldInterests: [],
+      studyCountries: []
+    };
+    if (!profile.country) profile.country = pr?.country || metadata.country || "Kenya";
+    if (!profile.targetLevel) profile.targetLevel = "Masters";
+    if (!profile.fieldInterests) profile.fieldInterests = [];
+    if (!profile.studyCountries) profile.studyCountries = [];
+
+    return {user:{id:au.id,email:au.email,name:pr?.name||metadata.name||"",country:pr?.country||metadata.country||"Kenya",plan:pr?.plan||"free",planName:pr?.plan==="plus"?"Plus":pr?.plan==="pro"?"Pro":pr?.plan==="mentor"?"Mentor":"Explorer",is_paid:!!(pr?.plan&&pr.plan!=="free"),role:"user",profile}};
   }
   if (path === "/api/scholarships" || path === "/api/scholarships/filtered") {
     if(!supabase) return {scholarships:[],stats:emptyStats(),documents:[]};
@@ -128,6 +141,60 @@ async function api(path, options = {}) {
   }
   if (path === "/api/essays/types") return ESSAY_TYPES_DATA;
   if (path === "/api/payment/plans") return PRICING_PLANS;
+  if (method === "PATCH" && path === "/api/profile") {
+    if(!supabase) throw new Error("Database unavailable");
+    const{data:{user:au}}=await supabase.auth.getUser();
+    if(!au) throw new Error("Not authenticated");
+
+    const { error: profileErr } = await supabase
+      .from("user_profiles")
+      .update({
+        name: body.name || au.user_metadata?.name,
+        country: body.country
+      })
+      .eq("id", au.id);
+
+    if (profileErr) throw new Error(profileErr.message);
+
+    const { data: { user: updatedAu }, error: authErr } = await supabase.auth.updateUser({
+      data: {
+        name: body.name || au.user_metadata?.name,
+        country: body.country,
+        profile: body
+      }
+    });
+
+    if (authErr) throw new Error(authErr.message);
+
+    let pr = null;
+    try {
+      const r = await supabase.from("user_profiles").select("*").eq("id", updatedAu.id).maybeSingle();
+      pr = r.data;
+    } catch {}
+
+    const metadata = updatedAu.user_metadata || {};
+    const savedProfile = metadata.profile || {
+      country: pr?.country || metadata.country || "Kenya",
+      targetLevel: "Masters",
+      fieldInterests: [],
+      studyCountries: []
+    };
+
+    return {
+      user: {
+        id: updatedAu.id,
+        email: updatedAu.email,
+        name: pr?.name || metadata.name || "",
+        country: pr?.country || metadata.country || "Kenya",
+        plan: pr?.plan || "free",
+        planName: pr?.plan === "plus" ? "Plus" : pr?.plan === "pro" ? "Pro" : pr?.plan === "mentor" ? "Mentor" : "Explorer",
+        is_paid: !!(pr?.plan && pr.plan !== "free"),
+        role: "user",
+        profile: savedProfile
+      }
+    };
+  }
+
   if (path === "/api/auth/login" || path === "/api/auth/register" || path === "/api/auth/reset-password") {
     return {user:null}; // Handled directly in AuthScreen component
   }
@@ -190,6 +257,27 @@ function App() {
 
   React.useEffect(() => {
     bootstrap();
+
+    if (supabase) {
+      const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+        if (event === "SIGNED_IN" && session) {
+          const me = await api("/api/me");
+          if (me.user) {
+            setUser(me.user);
+            try { await loadScholarships(); } catch (e) { showToast("Scholarship data loading, please wait…"); }
+          }
+        } else if (event === "SIGNED_OUT") {
+          setUser(null);
+          setRows([]);
+          setDocuments([]);
+          setStats(emptyStats());
+        }
+      });
+
+      return () => {
+        subscription.unsubscribe();
+      };
+    }
   }, []);
 
   React.useEffect(() => {
@@ -491,7 +579,13 @@ function AuthScreen({ config, initialMode = "login", onAuthed, onBackToLanding }
           plan: "free",
           planName: "Explorer",
           is_paid: false,
-          role: "user"
+          role: "user",
+          profile: authUser.user_metadata?.profile || {
+            country: authUser.user_metadata?.country || form.country || "Kenya",
+            targetLevel: "Masters",
+            fieldInterests: [],
+            studyCountries: []
+          }
         };
         onAuthed(nextUser);
       } catch (err) {
@@ -1243,12 +1337,19 @@ function inferClientCategories(row) {
 }
 
 function ProfileCard({ user, onUserChanged, onRefresh, onToast }) {
-  const [profile, setProfile] = React.useState(user.profile);
+  const defaultProfile = React.useMemo(() => ({
+    country: user.country || "Kenya",
+    targetLevel: "Masters",
+    fieldInterests: [],
+    studyCountries: []
+  }), [user.country]);
+
+  const [profile, setProfile] = React.useState(user.profile || defaultProfile);
   const [saving, setSaving] = React.useState(false);
 
   React.useEffect(() => {
-    setProfile(user.profile);
-  }, [user.profile]);
+    setProfile(user.profile || defaultProfile);
+  }, [user.profile, defaultProfile]);
 
   async function saveProfile(event) {
     event.preventDefault();
@@ -1338,7 +1439,7 @@ function ScholarshipWorkspace({
   const [filters, setFilters] = React.useState({
     query: "",
     country: "All countries",
-    applicantCountry: user.profile.country || user.country,
+    applicantCountry: user.profile?.country || user.country || "Kenya",
     level: "All levels",
     category: selectedCategory || "All categories",
     status: "All statuses",
