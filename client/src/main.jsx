@@ -113,7 +113,7 @@ async function api(path, options = {}) {
   }
   if (path === "/api/scholarships" || path === "/api/scholarships/filtered") {
     if(!supabase) return {scholarships:[],stats:emptyStats(),documents:[]};
-    const{data:s}=await supabase.from("scholarships").select("*").order("created_at",{ascending:false});
+    const{data:s}=await supabase.from("scholarships").select("*").eq("published", true).order("created_at",{ascending:false});
     const normalized = (s||[]).map(row=>({...row,
       application:row.application||{applied:false,status:"Not started",priority:"Normal",notes:""},
       match:row.match||{score:0,urgency:{tone:"normal",label:"Normal"},reasons:[],missingDocuments:[]}
@@ -198,6 +198,96 @@ async function api(path, options = {}) {
   if (path === "/api/auth/login" || path === "/api/auth/register" || path === "/api/auth/reset-password") {
     return {user:null}; // Handled directly in AuthScreen component
   }
+
+  // Admin endpoints
+  if (path === "/api/admin/login" && method === "POST") {
+    const adminEmail = import.meta.env.VITE_ADMIN_EMAIL || "admin@zawadi.app";
+    const adminPassword = import.meta.env.VITE_ADMIN_PASSWORD || "admin123";
+    
+    if (body.email === adminEmail && body.password === adminPassword) {
+      // Store admin session in localStorage
+      const adminToken = btoa(`${body.email}:${Date.now()}`);
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem('zawadi:adminToken', adminToken);
+      }
+      return {
+        user: {
+          id: 'admin-1',
+          email: body.email,
+          name: 'Admin',
+          role: 'admin',
+          is_paid: true,
+          plan: 'admin'
+        }
+      };
+    }
+    throw new Error("Invalid admin credentials");
+  }
+
+  if (path === "/api/admin/users") {
+    if (!supabase) return {users: [], subscriptions: [], subscriptionStats: {}, categories: [], sources: [], ingestion: {configured: false, endpoint: "/api/ingest", botInjected: 0, recent: []}, audit: {issues: [], summary: {total: 0, critical: 0, warning: 0, info: 0}}, plans: [], stats: {}};
+    
+    // Check admin authentication
+    const adminToken = typeof window !== 'undefined' ? window.localStorage.getItem('zawadi:adminToken') : null;
+    if (!adminToken) throw new Error("Admin authentication required");
+
+    const {data: users} = await supabase.from("user_profiles").select("*").order("created_at", {ascending: false});
+    const {data: applications} = await supabase.from("applications").select("*");
+    const {data: documents} = await supabase.from("documents").select("*");
+
+    return {
+      users: (users || []).map(u => ({
+        ...u,
+        applicationsCount: (applications || []).filter(a => a.user_id === u.id).length,
+        documentsCount: (documents || []).filter(d => d.user_id === u.id).length,
+        sessionsCount: 0,
+        planName: u.plan === "plus" ? "Plus" : u.plan === "pro" ? "Pro" : u.plan === "mentor" ? "Mentor" : "Explorer",
+        role: "user"
+      })),
+      subscriptions: [],
+      subscriptionStats: {},
+      categories: [],
+      sources: [],
+      ingestion: {configured: false, endpoint: "/api/ingest", botInjected: 0, recent: []},
+      audit: {issues: [], summary: {total: 0, critical: 0, warning: 0, info: 0}},
+      plans: PRICING_PLANS.map(p => ({id: p.id, name: p.name})),
+      stats: {totalApplications: (applications || []).length, totalDocuments: (documents || []).length, missingLinks: 0}
+    };
+  }
+
+  if (path === "/api/admin/scholarships") {
+    if (!supabase) return {scholarships: [], stats: {}};
+    
+    // Check admin authentication
+    const adminToken = typeof window !== 'undefined' ? window.localStorage.getItem('zawadi:adminToken') : null;
+    if (!adminToken) throw new Error("Admin authentication required");
+
+    const {data: scholarships} = await supabase.from("scholarships").select("*").order("created_at", {ascending: false});
+    
+    return {
+      scholarships: (scholarships || []).map(s => ({
+        ...s,
+        verifiedAt: s.published ? new Date().toISOString() : null
+      })),
+      stats: {
+        totalScholarships: (scholarships || []).length,
+        verifiedScholarships: (scholarships || []).filter(s => s.published).length,
+        unverifiedScholarships: (scholarships || []).filter(s => !s.published).length
+      }
+    };
+  }
+
+  // Update scholarship published status
+  if (method === "PATCH" && path.startsWith("/api/scholarships/")) {
+    if (!supabase) throw new Error("Database unavailable");
+    const id = path.split("/").pop();
+    const {error} = await supabase.from("scholarships").update(body).eq("id", id);
+    if (error) throw new Error(error.message);
+    return {ok: true};
+  }
+
+  throw new Error("Route not found: "+path);
+}
   if (path === "/api/billing/checkout" || path === "/api/payment/initiate") {
     throw new Error("Paystack integration coming soon.");
   }

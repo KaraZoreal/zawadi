@@ -2678,7 +2678,7 @@ td small {
   font-size: 12px;
 }
 
-/* ── RESPONSIVE ──────────────────────────────────────── */
+/* ── RESPONSIVE ────────────────────────────────��─────── */
 
 @media (max-width: 960px) {
   .landing-nav-links {
@@ -3186,3 +3186,207 @@ td small {
 .recent-meta { display: flex; flex-direction: column; gap: 2px; text-align: right; white-space: nowrap; }
 .recent-meta small { font-size: 11px; color: var(--muted); }
 .empty-mini { padding: 24px; text-align: center; color: var(--muted); font-size: 13px; }
+
+/* ── Enhanced Design System ─────────────────────────────────────── */
+
+/* Improved card styling with better shadows and transitions */
+.metric, .panel, .category-card, .price-card {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.metric:hover, .panel:hover, .category-card:hover {
+  box-shadow: 0 12px 32px rgba(28, 42, 37, 0.08);
+  border-color: var(--green);
+}
+
+/* Enhanced button styling */
+.primary-btn {
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  box-shadow: 0 4px 16px rgba(15, 110, 86, 0.25);
+  transition: all 0.2s ease;
+}
+
+.primary-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(15, 110, 86, 0.35);
+}
+
+.primary-btn:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: 0 2px 8px rgba(15, 110, 86, 0.25);
+}
+
+/* Improved form inputs */
+input, select, textarea {
+  transition: all 0.2s ease;
+}
+
+input:hover:not(:disabled), select:hover:not(:disabled), textarea:hover:not(:disabled) {
+  border-color: var(--line-strong);
+  background: var(--surface);
+}
+
+input:focus, select:focus, textarea:focus {
+  border-color: var(--green);
+  box-shadow: 0 0 0 4px rgba(15, 110, 86, 0.1);
+}
+
+/* Enhanced scholarship card in list */
+.scholarship-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.scholarship-row:hover {
+  border-color: var(--green);
+  box-shadow: 0 8px 24px rgba(15, 110, 86, 0.08);
+  transform: translateY(-1px);
+}
+
+.scholarship-row strong {
+  font-size: 15px;
+  color: var(--ink);
+}
+
+.scholarship-row span {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* Enhanced topbar styling */
+.topbar {
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 16px;
+  margin-bottom: 24px;
+}
+
+.topbar h1 {
+  font-weight: 800;
+  letter-spacing: -0.5px;
+}
+
+/* Enhanced metrics grid */
+.metrics {
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 16px;
+}
+
+.metric {
+  box-shadow: 0 4px 12px rgba(28, 42, 37, 0.04);
+  border: 1px solid var(--line);
+}
+
+/* Enhanced buttons in admin panel */
+.primary-btn, .secondary-btn, .quiet-btn {
+  border-radius: 6px;
+  font-weight: 700;
+  transition: all 0.2s ease;
+}
+
+.secondary-btn {
+  background: var(--green-soft);
+  border: 1px solid rgba(15, 110, 86, 0.2);
+}
+
+.secondary-btn:hover {
+  background: var(--green);
+  color: white;
+  box-shadow: 0 4px 12px rgba(15, 110, 86, 0.2);
+}
+
+/* Enhanced modal styling */
+.modal {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: 0 20px 60px rgba(28, 42, 37, 0.15);
+}
+
+.modal-backdrop {
+  background: rgba(22, 35, 31, 0.5);
+  backdrop-filter: blur(4px);
+}
+
+/* Enhanced table styling */
+.sheet-table th {
+  background: linear-gradient(135deg, #f0f4ef 0%, #e6eef7 100%);
+  font-weight: 700;
+  border-bottom: 2px solid var(--line-strong);
+}
+
+.sheet-table tr:hover td {
+  background: rgba(15, 110, 86, 0.02);
+}
+
+/* Enhanced sidebar navigation */
+.side-nav button {
+  font-weight: 700;
+  transition: all 0.2s ease;
+  border-radius: 8px;
+}
+
+.side-nav button:hover {
+  background: var(--green-soft);
+  color: var(--green);
+  transform: translateX(2px);
+}
+
+.side-nav button.active {
+  background: linear-gradient(135deg, var(--green), rgba(15, 110, 86, 0.9));
+  color: white;
+  box-shadow: 0 4px 12px rgba(15, 110, 86, 0.2);
+}
+
+/* Enhanced empty states */
+.empty-state {
+  border-style: dashed;
+  border-color: var(--line-strong);
+  border-radius: 10px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+/* Improved tag and pill styling */
+.tag-row em, .doc-gap-list span, .missing-docs {
+  background: linear-gradient(135deg, var(--blue-soft), rgba(49, 93, 145, 0.05));
+  border: 1px solid rgba(49, 93, 145, 0.1);
+  transition: all 0.2s ease;
+}
+
+.tag-row em:hover {
+  border-color: var(--blue);
+  box-shadow: 0 2px 8px rgba(49, 93, 145, 0.1);
+}
+
+/* Enhanced plan badges */
+.plan-pill {
+  font-weight: 700;
+  border: 1px solid rgba(15, 110, 86, 0.2);
+}
+
+/* Responsive enhancements for smaller screens */
+@media (max-width: 768px) {
+  .metrics {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+  }
+
+  .topbar h1 {
+    font-size: 24px;
+  }
+
+  .sheet-table {
+    font-size: 12px;
+  }
+
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+}
