@@ -901,8 +901,8 @@ function Portal({
         </div>
         <div className="user-tile">
           <div>
-            <strong>{user.name}</strong>
-            <span>{user.country} - {user.planName}</span>
+            <strong>{user?.name}</strong>
+            <span>{user?.country} - {user?.planName}</span>
           </div>
           <button
             className="icon-btn"
@@ -1272,12 +1272,12 @@ function inferClientCategories(row) {
 }
 
 function ProfileCard({ user, onUserChanged, onRefresh, onToast }) {
-  const [profile, setProfile] = React.useState(user.profile || { country: user.country, targetLevel: "Undergraduate", fieldInterests: [], studyCountries: [] });
+  const [profile, setProfile] = React.useState(user?.profile || { country: user?.country, targetLevel: "Undergraduate", fieldInterests: [], studyCountries: [] });
   const [saving, setSaving] = React.useState(false);
 
   React.useEffect(() => {
-    setProfile(user.profile || { country: user.country, targetLevel: "Undergraduate", fieldInterests: [], studyCountries: [] });
-  }, [user.profile, user.country]);
+    setProfile(user?.profile || { country: user?.country, targetLevel: "Undergraduate", fieldInterests: [], studyCountries: [] });
+  }, [user?.profile, user?.country]);
 
   async function saveProfile(event) {
     event.preventDefault();
@@ -1302,22 +1302,22 @@ function ProfileCard({ user, onUserChanged, onRefresh, onToast }) {
       <div className="panel-head">
         <div>
           <span className="eyebrow">Matching profile</span>
-          <h2>{user.country}</h2>
+          <h2>{user?.country}</h2>
         </div>
-        <span className="plan-pill">{user.planName}</span>
+        <span className="plan-pill">{user?.planName}</span>
       </div>
       <form className="profile-form" onSubmit={saveProfile}>
         <label>
           Applicant country
           <input
-            value={profile.country}
+            value={profile?.country || ""}
             onChange={(event) => setProfile({ ...profile, country: event.target.value })}
           />
         </label>
         <label>
           Target level
           <select
-            value={profile.targetLevel}
+            value={profile?.targetLevel || "Undergraduate"}
             onChange={(event) => setProfile({ ...profile, targetLevel: event.target.value })}
           >
             <option>Undergraduate</option>
@@ -1330,7 +1330,7 @@ function ProfileCard({ user, onUserChanged, onRefresh, onToast }) {
         <label>
           Fields
           <input
-            value={profile.fieldInterests.join(", ")}
+            value={profile?.fieldInterests?.join(", ") || ""}
             onChange={(event) =>
               setProfile({ ...profile, fieldInterests: toList(event.target.value) })
             }
@@ -1339,7 +1339,7 @@ function ProfileCard({ user, onUserChanged, onRefresh, onToast }) {
         <label>
           Preferred study countries
           <input
-            value={profile.studyCountries.join(", ")}
+            value={profile?.studyCountries?.join(", ") || ""}
             onChange={(event) =>
               setProfile({ ...profile, studyCountries: toList(event.target.value) })
             }
@@ -1367,7 +1367,7 @@ function ScholarshipWorkspace({
   const [filters, setFilters] = React.useState({
     query: "",
     country: "All countries",
-    applicantCountry: user.profile?.country || user.country,
+    applicantCountry: user?.profile?.country || user?.country,
     level: "All levels",
     category: selectedCategory || "All categories",
     status: "All statuses",
@@ -2016,9 +2016,9 @@ function PricingWorkspace({ config, user, onUserChanged, onToast }) {
       </div>
       <div className="pricing-grid">
         {plans.map((plan) => {
-          const price = planDisplayPrice(plan, interval, user.country);
-          const isCurrent = user.plan === plan.id;
-          const isIncluded = isPaid(user) && planRank(plan.id) < planRank(user.plan);
+          const price = planDisplayPrice(plan, interval, user?.country);
+          const isCurrent = user?.plan === plan.id;
+          const isIncluded = isPaid(user) && planRank(plan.id) < planRank(user?.plan);
           return (
             <article key={plan.id} className={`price-card ${plan.id === "plus" ? "featured" : ""}`}>
               <span className="plan-badge">{plan.badge}</span>
