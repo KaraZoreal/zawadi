@@ -209,6 +209,8 @@ function App() {
       const hash = window.location.hash;
       if (hash && hash.includes("type=recovery")) {
         // Prevent auto-login and render auth screen in reset mode
+        setShowLanding(false);
+        setAuthMode("reset");
         setBooting(false);
         return;
       }
