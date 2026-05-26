@@ -3,6 +3,7 @@ import { fetchSubscription, getLimits, requirePlan } from '../../middleware/subs
 import profileRouter from './profile.js';
 import essaysRouter from './essays.js';
 import applicationsRouter from './applications.js';
+import subscriptionsRouter from './subscriptions.js';
 
 const router = express.Router();
 
@@ -13,5 +14,6 @@ router.use(fetchSubscription);
 router.use('/profile', profileRouter);
 router.use('/essays', essaysRouter);
 router.use('/applications', applicationsRouter);
+router.use('/', subscriptionsRouter);
 
 export default router;

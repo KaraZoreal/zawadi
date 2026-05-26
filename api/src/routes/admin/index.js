@@ -5,6 +5,7 @@ import usersRouter from './users.js';
 import subscriptionsRouter from './subscriptions.js';
 import auditRouter from './audit.js';
 import webhooksRouter from './webhooks.js';
+import statisticsRouter from './statistics.js';
 
 const router = express.Router();
 
@@ -17,6 +18,7 @@ router.use('/users', usersRouter);
 router.use('/subscriptions', subscriptionsRouter);
 router.use('/audit', auditRouter);
 router.use('/webhooks', webhooksRouter);
+router.use('/statistics', statisticsRouter);
 
 // Admin dashboard overview
 router.get('/overview', async (req, res) => {
