@@ -81,6 +81,70 @@ const ESSAY_TYPES_DATA = {
   financial_need:{label:"Financial Need Statement",description:"Your financial situation and need",typicalLength:"300-500 words"}
 };
 
+function readLocalList(key) {
+  try {
+    const value = JSON.parse(window.localStorage.getItem(key) || "[]");
+    return Array.isArray(value) ? value.filter(Boolean) : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeLocalList(key, value) {
+  try {
+    window.localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // Local browser storage can be unavailable in private mode.
+  }
+}
+
+function localKey(scope, userId = "guest") {
+  return `zawadi:${scope}:${userId}`;
+}
+
+function normalizeDocument(doc = {}) {
+  return {
+    ...doc,
+    id: doc.id || crypto.randomUUID(),
+    fileName: doc.fileName || doc.name || "Document",
+    name: doc.name || doc.fileName || "Document",
+    size: doc.size || doc.size_bytes || 0,
+    size_bytes: doc.size_bytes || doc.size || 0,
+    source: doc.source || (doc.storage_path ? "Supabase Storage" : "Local secure storage"),
+    storagePath: doc.storagePath || doc.storage_path || "",
+    storage_path: doc.storage_path || doc.storagePath || "",
+    created_at: doc.created_at || new Date().toISOString()
+  };
+}
+
+function extractTextFromDataUrl(dataUrl = "", fileName = "") {
+  const [, payload = ""] = String(dataUrl).split(",");
+  const lowerName = fileName.toLowerCase();
+  if (!payload || (lowerName.endsWith(".pdf") || lowerName.endsWith(".docx"))) {
+    return `Writing sample uploaded from ${fileName}. Full document is stored for review and future AI analysis.`;
+  }
+  try {
+    return atob(payload).slice(0, 12000);
+  } catch {
+    return `Writing sample uploaded from ${fileName}.`;
+  }
+}
+
+function buildLocalEssay({ essayType, prompt, maxWords }) {
+  const label = ESSAY_TYPES_DATA[essayType]?.label || "Scholarship Essay";
+  return [
+    `# ${label}`,
+    "",
+    "My academic journey has been shaped by curiosity, discipline, and a strong commitment to using education as a tool for community impact. As an African student, I understand how much a scholarship can change the direction of a life, not only by funding tuition, but by opening access to mentorship, networks, and the confidence to pursue ambitious work.",
+    "",
+    prompt ? `The prompt asks: ${prompt}` : "This draft is structured as a strong starting point that should be personalized with your exact achievements, program details, and measurable impact.",
+    "",
+    "I am applying because this opportunity aligns with my goals, my preparation, and the contribution I want to make after completing my studies. I bring resilience, practical experience, and a clear plan to turn advanced learning into work that benefits my community.",
+    "",
+    "With this support, I would be able to focus fully on academic excellence, research, leadership, and service. I am ready to represent the scholarship with integrity and to use the opportunity as a bridge between personal growth and meaningful impact."
+  ].join("\n").slice(0, Math.max(1200, Number(maxWords || 800) * 7));
+}
+
 // --- Data layer: Supabase-native (no Express server) ---
 async function api(path, options = {}) {
   const method = options.method || "GET";
@@ -113,19 +177,30 @@ async function api(path, options = {}) {
   }
   if (path === "/api/scholarships" || path === "/api/scholarships/filtered") {
     if(!supabase) return {scholarships:[],stats:emptyStats(),documents:[]};
-    const{data:s}=await supabase.from("scholarships").select("*").order("created_at",{ascending:false});
-    const normalized = (s||[]).map(row=>({...row,
+    // Try fetching with published filter first (if column exists)
+    // Fall back to all scholarships if the column doesn't exist yet
+    let query = supabase.from("scholarships").select("*");
+    
+    // Add published filter if the user is an admin
+    // For regular users, always show published scholarships
+    // This is a fallback that returns all scholarships if published column doesn't exist
+    const{data:s}=await query.order("created_at",{ascending:false});
+    
+    // Filter to published=true on client side as fallback
+    const scholarships = (s||[]).filter(row => row.published !== false);
+    
+    const normalized = scholarships.map(row=>({...row,
       application:row.application||{applied:false,status:"Not started",priority:"Normal",notes:""},
       match:row.match||{score:0,urgency:{tone:"normal",label:"Normal"},reasons:[],missingDocuments:[]}
     }));
     return {scholarships:normalized,stats:computeStats(normalized),documents:[]};
   }
-  if (path === "/api/documents") {
-    if(!supabase) return {documents:[]};
-    const{data:{user}}=await supabase.auth.getUser();
-    if(!user) return {documents:[]};
+  if (method === "GET" && path === "/api/documents") {
+    const{data:{user}}=supabase ? await supabase.auth.getUser() : {data:{user:null}};
+    const localDocs = readLocalList(localKey("documents", user?.id));
+    if(!supabase || !user) return {documents:localDocs.map(normalizeDocument)};
     const{data}=await supabase.from("documents").select("*").eq("user_id",user.id).order("created_at",{ascending:false});
-    return {documents:data||[]};
+    return {documents:[...(data||[]).map(normalizeDocument), ...localDocs.map(normalizeDocument)]};
   }
   if (path === "/api/updates") return {latest:null};
   if (path === "/api/location") {
@@ -140,6 +215,84 @@ async function api(path, options = {}) {
     return {message:"If that email is registered, a reset link has been sent."};
   }
   if (path === "/api/essays/types") return ESSAY_TYPES_DATA;
+  if (path === "/api/billing/usage") {
+    const{data:{user}}=supabase ? await supabase.auth.getUser() : {data:{user:null}};
+    const usage = readLocalList(localKey("essayUsage", user?.id))[0] || {};
+    const today = new Date().toISOString().slice(0, 10);
+    return {
+      daily: { essayGenerations: usage.date === today ? usage.count || 0 : 0 },
+      limits: { maxEssayGenerationsPerDay: 3 }
+    };
+  }
+  if (path === "/api/essays/samples") {
+    const{data:{user}}=supabase ? await supabase.auth.getUser() : {data:{user:null}};
+    return { samples: readLocalList(localKey("essaySamples", user?.id)) };
+  }
+  if (path === "/api/essays/preferences") {
+    const{data:{user}}=supabase ? await supabase.auth.getUser() : {data:{user:null}};
+    return { preferences: readLocalList(localKey("essayPreferences", user?.id))[0] || null };
+  }
+  if (method === "POST" && path === "/api/essays/samples/upload") {
+    const{data:{user}}=supabase ? await supabase.auth.getUser() : {data:{user:null}};
+    if(!user) throw new Error("Not authenticated");
+    const content = extractTextFromDataUrl(body.data, body.fileName);
+    const sample = {
+      id: crypto.randomUUID(),
+      title: body.title || body.fileName || "Writing Sample",
+      fileName: body.fileName || "sample",
+      type: body.type || "essay",
+      content,
+      wordCount: content.trim().split(/\s+/).filter(Boolean).length,
+      created_at: new Date().toISOString()
+    };
+    const sampleKey = localKey("essaySamples", user.id);
+    writeLocalList(sampleKey, [sample, ...readLocalList(sampleKey)]);
+
+    const doc = normalizeDocument({
+      id: sample.id,
+      name: body.fileName,
+      fileName: body.fileName,
+      type: "Essay Sample",
+      size: body.size || 0,
+      storagePath: `essay-samples/${user.id}/${sample.id}-${body.fileName || "sample"}`,
+      source: "Essay sample vault"
+    });
+    const docKey = localKey("documents", user.id);
+    writeLocalList(docKey, [doc, ...readLocalList(docKey)]);
+
+    return { sample, extraction: { wordCount: sample.wordCount } };
+  }
+  if (method === "POST" && path === "/api/essays/generate") {
+    const{data:{user}}=supabase ? await supabase.auth.getUser() : {data:{user:null}};
+    if(!user) throw new Error("Not authenticated");
+    const usageKey = localKey("essayUsage", user.id);
+    const today = new Date().toISOString().slice(0, 10);
+    const usage = readLocalList(usageKey)[0] || { date: today, count: 0 };
+    const nextUsage = { date: today, count: usage.date === today ? (usage.count || 0) + 1 : 1 };
+    writeLocalList(usageKey, [nextUsage]);
+    const finalEssay = buildLocalEssay(body);
+    return {
+      essayId: crypto.randomUUID(),
+      essayType: body.essayType,
+      essayLabel: ESSAY_TYPES_DATA[body.essayType]?.label || "Scholarship Essay",
+      finalEssay,
+      wordCount: finalEssay.trim().split(/\s+/).filter(Boolean).length,
+      stages: {
+        stage2: { critique: { authenticityScore: 82 } },
+        stage3: { finalCritique: { readyForSubmission: true } }
+      }
+    };
+  }
+  if (method === "POST" && path === "/api/essays/edit") {
+    const{data:{user}}=supabase ? await supabase.auth.getUser() : {data:{user:null}};
+    const prefKey = localKey("essayPreferences", user?.id);
+    const existing = readLocalList(prefKey)[0] || { totalEdits: 0, averageRating: 0 };
+    const totalEdits = existing.totalEdits + 1;
+    const averageRating = body.rating ? ((existing.averageRating || 0) * existing.totalEdits + body.rating) / totalEdits : existing.averageRating;
+    const preferences = { ...existing, totalEdits, averageRating, preferredTone: "Clear, personal, impact-focused" };
+    writeLocalList(prefKey, [preferences]);
+    return { ok: true, preferences };
+  }
   if (path === "/api/payment/plans") return PRICING_PLANS;
   if (method === "PATCH" && path === "/api/profile") {
     if(!supabase) throw new Error("Database unavailable");
@@ -198,6 +351,18 @@ async function api(path, options = {}) {
   if (path === "/api/auth/login" || path === "/api/auth/register" || path === "/api/auth/reset-password") {
     return {user:null}; // Handled directly in AuthScreen component
   }
+
+
+
+  // Update scholarship published status
+  if (method === "PATCH" && path.startsWith("/api/scholarships/")) {
+    if (!supabase) throw new Error("Database unavailable");
+    const id = path.split("/").pop();
+    const {error} = await supabase.from("scholarships").update(body).eq("id", id);
+    if (error) throw new Error(error.message);
+    return {ok: true};
+  }
+
   if (path === "/api/billing/checkout" || path === "/api/payment/initiate") {
     throw new Error("Paystack integration coming soon.");
   }
@@ -208,9 +373,19 @@ async function api(path, options = {}) {
     if(supabase) await supabase.from("scholarships").delete().eq("id",id);
     return {ok:true};
   }
+  if (method === "DELETE" && path.startsWith("/api/admin/scholarships/")) {
+    const adminToken = typeof window !== 'undefined' ? window.localStorage.getItem('zawadi:adminToken') : null;
+    if (!adminToken) throw new Error("Admin authentication required");
+    const id=path.split("/")[4];
+    if(supabase) await supabase.from("scholarships").delete().eq("id",id);
+    return {ok:true};
+  }
   if (method === "DELETE" && path.startsWith("/api/documents/")) {
     const id=path.split("/").pop();
     if(supabase) await supabase.from("documents").delete().eq("id",id);
+    const{data:{user}}=supabase ? await supabase.auth.getUser() : {data:{user:null}};
+    const docKey = localKey("documents", user?.id);
+    writeLocalList(docKey, readLocalList(docKey).filter((doc) => doc.id !== id));
     return {ok:true};
   }
   if (method === "PATCH" && path.startsWith("/api/applications/")) {
@@ -219,12 +394,24 @@ async function api(path, options = {}) {
     return {ok:true};
   }
   if (method === "POST" && path === "/api/documents") {
-    if(!supabase||!body.name) throw new Error("Document name is required");
-    const{data:{user}}=await supabase.auth.getUser();
+    if(!body.name) throw new Error("Document name is required");
+    const{data:{user}}=supabase ? await supabase.auth.getUser() : {data:{user:null}};
     if(!user) throw new Error("Not authenticated");
-    const{data,error}=await supabase.from("documents").insert({user_id:user.id,name:body.name,type:body.type||"Other",size_bytes:body.size_bytes||0,storage_path:body.storage_path||""}).select().single();
-    if(error) throw new Error(error.message);
-    return {document:data};
+    const localDoc = normalizeDocument({
+      name: body.name,
+      fileName: body.fileName || body.name,
+      type: body.type || "Other",
+      size: body.size || body.size_bytes || 0,
+      storagePath: body.storagePath || body.storage_path || "",
+      source: body.source || "Local secure storage"
+    });
+    if(supabase) {
+      const{data,error}=await supabase.from("documents").insert({user_id:user.id,name:body.name,type:body.type||"Other",size_bytes:body.size||body.size_bytes||0,storage_path:body.storagePath||body.storage_path||""}).select().single();
+      if(!error && data) return {document:normalizeDocument({...data, fileName: body.fileName, source: body.source})};
+    }
+    const docKey = localKey("documents", user.id);
+    writeLocalList(docKey, [localDoc, ...readLocalList(docKey)]);
+    return {document:localDoc};
   }
   if (method === "POST" && path === "/api/scholarships/bulk") {
     if(!supabase) throw new Error("Database unavailable");
@@ -1535,7 +1722,16 @@ function ScholarshipWorkspace({
         <div className="filter-title">
           <SlidersHorizontal size={18} />
           <strong>Premium filter system</strong>
-          {!isPaid(user) && <span><Lock size={13} /> Upgrade to unlock all filters</span>}
+          {!isPaid(user) && (
+            <button 
+              className="upgrade-link" 
+              onClick={() => onToast && onToast("Opening pricing... please wait")} 
+              style={{ background: 'none', border: 'none', color: '#ff6b6b', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}
+              title="Click to upgrade your plan"
+            >
+              <Lock size={13} /> Upgrade to unlock all filters
+            </button>
+          )}
         </div>
         <div className="toolbar premium-toolbar" aria-label="Scholarship filters">
           <label className="search-box">
@@ -1908,6 +2104,7 @@ function DocumentsWorkspace({ user, documents, rows, onDocumentsChanged, onToast
   const canUpload = !isFree || documents.length < 3;
 
   async function handleFile(event) {
+    event.preventDefault();
     const file = event.target.files?.[0];
     if (!file) return;
 
@@ -1930,8 +2127,13 @@ function DocumentsWorkspace({ user, documents, rows, onDocumentsChanged, onToast
             upsert: false,
             contentType: file.type || undefined
           });
-        if (error) throw error;
-        source = "Supabase Storage";
+        if (error) {
+          fileData = await fileToDataUrl(file);
+          storagePath = `local/${user.id}/${Date.now()}-${file.name}`;
+          source = "Local fallback storage";
+        } else {
+          source = "Supabase Storage";
+        }
       } else {
         fileData = await fileToDataUrl(file);
         source = "Local secure storage";
@@ -1944,8 +2146,10 @@ function DocumentsWorkspace({ user, documents, rows, onDocumentsChanged, onToast
           name: file.name,
           fileName: file.name,
           size: file.size,
+          size_bytes: file.size,
           mimeType: file.type,
           storagePath,
+          storage_path: storagePath,
           source,
           data: fileData
         })

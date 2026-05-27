@@ -15,6 +15,7 @@ import {
   Clock3,
 } from "lucide-react";
 
+// Synchronized with main.jsx PRICING_PLANS
 const tiers = [
   {
     id: "free",
@@ -22,53 +23,66 @@ const tiers = [
     price: "Free",
     period: "forever",
     badge: "Free",
-    description: "Scholarship discovery and basic application tracking.",
+    description: "Scholarship discovery and basic tracking.",
     features: [
       "Open scholarship database",
-      "Basic country, level and field filters",
-      "Unlimited application tracking",
-      "3 document records",
-      "3 AI essays per day",
-      "Weekly in-app updates",
+      "Basic filters",
+      "3 AI essays/day",
     ],
     cta: "Start Free",
     accent: false,
   },
   {
     id: "plus",
-    name: "Scholar Plus",
+    name: "Plus",
     price: "$5",
     period: "per month",
-    badge: "Best value",
-    description: "Premium matching and deadline control for active applicants.",
+    badge: "Plus",
+    description: "Advanced tools for serious applicants.",
     features: [
-      "Unlimited application tracking",
+      "Everything in Explorer",
       "Premium filters",
-      "Smart match score",
-      "Document gap analysis",
-      "15 AI essays/day",
-      "20 auto-applies/day",
-      "Document intelligence analysis",
+      "Document analysis",
+      "15 document records",
+      "10 AI essays/day",
+      "Priority email",
     ],
-    cta: "Get Scholar Plus",
+    cta: "Get Plus",
     accent: true,
   },
   {
     id: "pro",
-    name: "Application Pro",
-    price: "$12",
+    name: "Pro",
+    price: "$15",
     period: "per month",
-    badge: "Power user",
-    description: "For applicants managing many countries, schools and deadlines.",
+    badge: "Pro",
+    description: "Full suite for competitive scholarships.",
     features: [
-      "Everything in Scholar Plus",
-      "50 AI essays/day",
-      "100 auto-applies/day",
-      "Priority urgency feed",
-      "Advanced school filters",
-      "CSV exports and intake tools",
+      "Everything in Plus",
+      "Unlimited AI essays",
+      "Bulk auto-apply",
+      "50 documents",
+      "Strategy insights",
+      "24hr support",
     ],
     cta: "Go Pro",
+    accent: false,
+  },
+  {
+    id: "mentor",
+    name: "Mentor",
+    price: "$50",
+    period: "per month",
+    badge: "Mentor",
+    description: "Complete mentorship experience.",
+    features: [
+      "Everything in Pro",
+      "1-on-1 mentorship",
+      "Interview prep",
+      "Custom strategy",
+      "Unlimited everything",
+    ],
+    cta: "Get Mentorship",
     accent: false,
   },
 ];
@@ -431,7 +445,7 @@ export default function LandingPage({ onGetStarted, onLogin }) {
             <h4>Resources</h4>
             <a href="#how-it-works">Scholarship guide</a>
             <a href="#features">Essay tools</a>
-            <a href="#pricing">FAQ</a>
+            <a href="/faq">FAQ</a>
           </div>
           <div className="landing-footer-col">
             <h4>Legal</h4>
@@ -441,8 +455,8 @@ export default function LandingPage({ onGetStarted, onLogin }) {
           </div>
           <div className="landing-footer-col">
             <h4>Company</h4>
-            <a href="#features">About Techsari</a>
-            <a href="mailto:hello@techsari.africa">Contact</a>
+            <a href="/about">About Techsari</a>
+            <a href="/contact">Contact</a>
             <a href="#pricing">Plans</a>
           </div>
         </div>

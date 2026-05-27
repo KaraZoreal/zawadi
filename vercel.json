@@ -1,9 +1,30 @@
 {
   "version": 2,
+  "buildCommand": "npm run vercel-build",
+  "env": {
+    "VITE_SUPABASE_URL": "@supabase_url",
+    "VITE_SUPABASE_ANON_KEY": "@supabase_key",
+    "SUPABASE_URL": "@supabase_url",
+    "SUPABASE_KEY": "@supabase_key",
+    "SUPABASE_SERVICE_ROLE": "@supabase_service_role",
+    "PAYSTACK_PUBLIC_KEY": "@paystack_public_key",
+    "PAYSTACK_SECRET_KEY": "@paystack_secret_key",
+    "BOT_SECRET": "@bot_secret",
+    "NODE_ENV": "production"
+  },
+  "functions": {
+    "api/src/server.js": {
+      "runtime": "nodejs18.x",
+      "maxDuration": 60,
+      "memory": 1024
+    }
+  },
   "routes": [
+    { "src": "/api/(.*)", "dest": "/api/src/server.js" },
     { "src": "/privacy", "dest": "/privacy.html" },
     { "src": "/terms", "dest": "/terms.html" },
     { "src": "/faq", "dest": "/faq.html" },
+    { "src": "/contact", "dest": "/contact.html" },
     { "src": "/about", "dest": "/about.html" },
     { "src": "/admin", "dest": "/admin.html" },
     { "handle": "filesystem" },
