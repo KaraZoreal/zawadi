@@ -26,7 +26,7 @@ export async function verifyAuth(req, res, next) {
     req.user = {
       id: data.user.id,
       email: data.user.email,
-      role: data.user.user_metadata?.role || 'user'
+      role: data.user.user_metadata?.role || data.user.app_metadata?.role || 'user'
     };
 
     next();
@@ -35,6 +35,8 @@ export async function verifyAuth(req, res, next) {
     res.status(401).json({ error: 'Authentication failed' });
   }
 }
+
+export const requireAuth = verifyAuth;
 
 /**
  * Check if user is admin

@@ -68,6 +68,23 @@ const tiers = [
     cta: "Go Pro",
     accent: false,
   },
+  {
+    id: "mentor",
+    name: "Mentor",
+    price: "$50",
+    period: "per month",
+    badge: "Mentor",
+    description: "Complete mentorship experience.",
+    features: [
+      "Everything in Pro",
+      "1-on-1 mentorship",
+      "Interview prep",
+      "Custom strategy",
+      "Unlimited everything",
+    ],
+    cta: "Get Mentorship",
+    accent: false,
+  },
 ];
 
 const steps = [
@@ -428,7 +445,7 @@ export default function LandingPage({ onGetStarted, onLogin }) {
             <h4>Resources</h4>
             <a href="#how-it-works">Scholarship guide</a>
             <a href="#features">Essay tools</a>
-            <a href="#pricing">FAQ</a>
+            <a href="/faq">FAQ</a>
           </div>
           <div className="landing-footer-col">
             <h4>Legal</h4>
@@ -438,8 +455,8 @@ export default function LandingPage({ onGetStarted, onLogin }) {
           </div>
           <div className="landing-footer-col">
             <h4>Company</h4>
-            <a href="#features">About Techsari</a>
-            <a href="mailto:hello@techsari.africa">Contact</a>
+            <a href="/about">About Techsari</a>
+            <a href="/contact">Contact</a>
             <a href="#pricing">Plans</a>
           </div>
         </div>

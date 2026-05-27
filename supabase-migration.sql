@@ -79,6 +79,41 @@ DROP POLICY IF EXISTS "Users manage own documents" ON public.documents;
 CREATE POLICY "Users manage own documents" ON public.documents
   FOR ALL USING (auth.uid() = user_id);
 
+-- 6b. Create private document storage bucket and policies
+INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+VALUES (
+  'documents',
+  'documents',
+  false,
+  10485760,
+  ARRAY[
+    'application/pdf',
+    'image/jpeg',
+    'image/png',
+    'image/webp',
+    'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'text/plain'
+  ]
+)
+ON CONFLICT (id) DO NOTHING;
+
+DROP POLICY IF EXISTS "Users read own document files" ON storage.objects;
+CREATE POLICY "Users read own document files" ON storage.objects
+  FOR SELECT USING (bucket_id = 'documents' AND auth.uid()::text = (storage.foldername(name))[1]);
+
+DROP POLICY IF EXISTS "Users upload own document files" ON storage.objects;
+CREATE POLICY "Users upload own document files" ON storage.objects
+  FOR INSERT WITH CHECK (bucket_id = 'documents' AND auth.uid()::text = (storage.foldername(name))[1]);
+
+DROP POLICY IF EXISTS "Users update own document files" ON storage.objects;
+CREATE POLICY "Users update own document files" ON storage.objects
+  FOR UPDATE USING (bucket_id = 'documents' AND auth.uid()::text = (storage.foldername(name))[1]);
+
+DROP POLICY IF EXISTS "Users delete own document files" ON storage.objects;
+CREATE POLICY "Users delete own document files" ON storage.objects
+  FOR DELETE USING (bucket_id = 'documents' AND auth.uid()::text = (storage.foldername(name))[1]);
+
 -- 7. Create applications table
 CREATE TABLE IF NOT EXISTS public.applications (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

@@ -49,6 +49,96 @@ router.get('/', async (req, res) => {
 });
 
 /**
+ * POST /api/admin/scholarships
+ * Create a scholarship draft from the admin console.
+ */
+router.post('/', async (req, res) => {
+  try {
+    const payload = {
+      id: uuidv4(),
+      ...req.body,
+      published: Boolean(req.body?.published),
+      created_by: req.user.id,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+
+    const { data, error } = await supabaseAdmin
+      .from('scholarships')
+      .insert(payload)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    await logAuditAction({
+      admin_id: req.user.id,
+      action: 'CREATE_SCHOLARSHIP',
+      resource_type: 'scholarship',
+      resource_id: data.id,
+      before_values: null,
+      after_values: data,
+      ip_address: req.ip
+    });
+
+    res.status(201).json(data);
+  } catch (err) {
+    console.error('[CREATE_SCHOLARSHIP_ERROR]', err);
+    res.status(500).json({ error: 'Failed to create scholarship' });
+  }
+});
+
+/**
+ * PATCH /api/admin/scholarships/:id
+ * Update scholarship details without changing publish state.
+ */
+router.patch('/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updates = {
+      ...req.body,
+      updated_at: new Date().toISOString()
+    };
+
+    delete updates.id;
+    delete updates.created_at;
+    delete updates.created_by;
+    delete updates.published_by;
+    delete updates.published_at;
+
+    const { data: before } = await supabaseAdmin
+      .from('scholarships')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    const { data, error } = await supabaseAdmin
+      .from('scholarships')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    await logAuditAction({
+      admin_id: req.user.id,
+      action: 'UPDATE_SCHOLARSHIP',
+      resource_type: 'scholarship',
+      resource_id: id,
+      before_values: before,
+      after_values: updates,
+      ip_address: req.ip
+    });
+
+    res.json(data);
+  } catch (err) {
+    console.error('[UPDATE_SCHOLARSHIP_ERROR]', err);
+    res.status(500).json({ error: 'Failed to update scholarship' });
+  }
+});
+
+/**
  * PATCH /api/admin/scholarships/:id/publish
  * Publish a scholarship to users
  */

@@ -3,43 +3,43 @@ import { supabaseAdmin } from '../config.js';
 // Subscription tiers with their limits
 export const SUBSCRIPTION_TIERS = {
   free: {
-    name: 'Free',
-    essayLimit: 3, // Monthly
-    essayDailyLimit: 1,
-    applicationsLimit: 5,
+    name: 'Explorer',
+    essayLimit: 90,
+    essayDailyLimit: 3,
+    applicationsLimit: -1,
     documentsLimit: 3,
-    features: ['scholarship_matching', 'basic_essays'],
+    features: ['scholarship_matching', 'application_tracking', 'basic_essays'],
     price: 0
   },
   plus: {
-    name: 'Scholar Plus',
-    essayLimit: 20, // Monthly
-    essayDailyLimit: 2,
-    applicationsLimit: 20,
+    name: 'Plus',
+    essayLimit: 300,
+    essayDailyLimit: 10,
+    applicationsLimit: -1,
     documentsLimit: 15,
-    features: ['scholarship_matching', 'unlimited_essays', 'essay_feedback', 'interview_prep'],
+    features: ['premium_filters', 'document_analysis', 'priority_email'],
     price: 5,
     interval: 'monthly'
   },
   pro: {
-    name: 'Application Pro',
-    essayLimit: 100, // Monthly
-    essayDailyLimit: 5,
-    applicationsLimit: 100,
+    name: 'Pro',
+    essayLimit: -1,
+    essayDailyLimit: -1,
+    applicationsLimit: -1,
     documentsLimit: 50,
-    features: ['all_plus_features', 'priority_support', 'interview_coaching'],
-    price: 12,
+    features: ['bulk_auto_apply', 'strategy_insights', '24hr_support'],
+    price: 15,
     interval: 'monthly'
   },
   mentor: {
     name: 'Mentor',
-    essayLimit: -1, // Unlimited
+    essayLimit: -1,
     essayDailyLimit: -1,
     applicationsLimit: -1,
     documentsLimit: -1,
-    features: ['all_features', 'direct_mentor', 'lifetime_support'],
-    price: 99,
-    interval: 'lifetime'
+    features: ['all_features', 'direct_mentor', 'interview_prep', 'custom_strategy'],
+    price: 50,
+    interval: 'monthly'
   }
 };
 

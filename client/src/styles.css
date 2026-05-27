@@ -2494,7 +2494,7 @@ td small {
 
 .landing-pricing-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(260px, 1fr));
+  grid-template-columns: repeat(4, minmax(240px, 1fr));
   gap: 18px;
 }
 
@@ -2521,7 +2521,7 @@ td small {
 
 .landing-testimonials-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(280px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
   gap: 18px;
   padding: 0 clamp(16px, 4vw, 48px);
 }
