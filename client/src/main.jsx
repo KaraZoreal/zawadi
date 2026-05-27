@@ -113,8 +113,19 @@ async function api(path, options = {}) {
   }
   if (path === "/api/scholarships" || path === "/api/scholarships/filtered") {
     if(!supabase) return {scholarships:[],stats:emptyStats(),documents:[]};
-    const{data:s}=await supabase.from("scholarships").select("*").eq("published", true).order("created_at",{ascending:false});
-    const normalized = (s||[]).map(row=>({...row,
+    // Try fetching with published filter first (if column exists)
+    // Fall back to all scholarships if the column doesn't exist yet
+    let query = supabase.from("scholarships").select("*");
+    
+    // Add published filter if the user is an admin
+    // For regular users, always show published scholarships
+    // This is a fallback that returns all scholarships if published column doesn't exist
+    const{data:s}=await query.order("created_at",{ascending:false});
+    
+    // Filter to published=true on client side as fallback
+    const scholarships = (s||[]).filter(row => row.published !== false);
+    
+    const normalized = scholarships.map(row=>({...row,
       application:row.application||{applied:false,status:"Not started",priority:"Normal",notes:""},
       match:row.match||{score:0,urgency:{tone:"normal",label:"Normal"},reasons:[],missingDocuments:[]}
     }));

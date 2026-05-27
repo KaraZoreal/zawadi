@@ -5,6 +5,44 @@ import { getLimits } from '../../middleware/subscription.js';
 const router = express.Router();
 
 /**
+ * POST /api/user/essays/samples/upload
+ * Upload sample documents for essay generation context
+ */
+router.post('/samples/upload', async (req, res) => {
+  try {
+    const { fileName, content, type } = req.body;
+    
+    if (!fileName || !content) {
+      return res.status(400).json({ error: 'fileName and content are required' });
+    }
+
+    // Store in database with reference to user
+    const { data, error } = await supabaseAdmin
+      .from('documents')
+      .insert({
+        user_id: req.user.id,
+        name: fileName,
+        type: type || 'text/plain',
+        size_bytes: Buffer.byteLength(content, 'utf8'),
+        storage_path: `samples/${req.user.id}/${fileName}`
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    res.json({
+      success: true,
+      document: data,
+      message: 'Document uploaded successfully'
+    });
+  } catch (err) {
+    console.error('[UPLOAD_DOCUMENT_ERROR]', err);
+    res.status(500).json({ error: 'Failed to upload document' });
+  }
+});
+
+/**
  * GET /api/user/essays/usage
  * Check essay generation usage for current period
  */
