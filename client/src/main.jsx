@@ -41,8 +41,8 @@ import "./styles.css";
 const ApplicationCenter = lazy(() => import("./components/ApplicationCenter.jsx"));
 const IntelligencePanel = lazy(() => import("./components/IntelligencePanel.jsx"));
 const UpgradeModal = lazy(() => import("./components/UpgradeModal.jsx"));
-const LandingPage = lazy(() => import("./components/LandingPageNew.jsx"));
-const AuthScreenComponent = lazy(() => import("./components/AuthScreenNew.jsx"));
+const LandingPage = lazy(() => import("./components/LandingPageProfessional.jsx"));
+const AuthScreenComponent = lazy(() => import("./components/AuthScreenProfessional.jsx"));
 
 // --- Supabase Client (initialized from Vite env vars) ---
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
