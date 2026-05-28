@@ -38,11 +38,10 @@ import {
 import "./styles.css";
 
 // --- Techsari Zawadi AI Components (lazy loaded) ---
-const EssayGenerator = lazy(() => import("./components/EssayGenerator.jsx"));
 const ApplicationCenter = lazy(() => import("./components/ApplicationCenter.jsx"));
 const IntelligencePanel = lazy(() => import("./components/IntelligencePanel.jsx"));
 const UpgradeModal = lazy(() => import("./components/UpgradeModal.jsx"));
-const LandingPage = lazy(() => import("./components/LandingPage.jsx"));
+const LandingPage = lazy(() => import("./components/LandingPageDesigned.jsx"));
 
 // --- Supabase Client (initialized from Vite env vars) ---
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
@@ -1123,7 +1122,6 @@ function Portal({
           {navButton("dashboard", "Overview", LayoutDashboard)}
           {navButton("scholarships", "Scholarships", Database)}
           {navButton("application-center", "Apply", Check)}
-          {navButton("essay-generator", "Essays", Sparkles)}
           {navButton("intelligence", "Doc Intel", FileCheck2)}
           {navButton("documents", "Documents", FileText)}
           {navButton("pricing", "Pricing", CreditCard)}
@@ -1258,18 +1256,6 @@ function Portal({
           </Suspense>
         )}
 
-        {view === "essay-generator" && (
-          <Suspense fallback={<BootScreen />}>
-            <EssayGenerator
-              api={api}
-              scholarships={rows}
-              user={user}
-              onToast={onToast}
-              onUpgrade={() => setUpgradeOpen(true)}
-            />
-          </Suspense>
-        )}
-
         {view === "intelligence" && (
           <Suspense fallback={<BootScreen />}>
             <IntelligencePanel
@@ -1326,7 +1312,6 @@ function viewTitle(view) {
   if (view === "scholarships") return "Scholarship finder";
   if (view === "documents") return "Document vault";
   if (view === "application-center") return "Application Center";
-  if (view === "essay-generator") return "AI Essay Generator";
   if (view === "intelligence") return "Document Intelligence";
   if (view === "pricing") return "Pricing";
   return "Command center";
@@ -1565,6 +1550,28 @@ function ProfileCard({ user, onUserChanged, onRefresh, onToast }) {
         </div>
         <span className="plan-pill">{user.planName}</span>
       </div>
+      
+      {/* English Language Encouragement Banner */}
+      <div style={{
+        background: "rgba(6, 78, 59, 0.08)",
+        border: "1px solid rgba(6, 78, 59, 0.2)",
+        borderRadius: "8px",
+        padding: "16px",
+        marginBottom: "24px"
+      }}>
+        <div style={{ display: "flex", gap: "12px", alignItems: "flex-start" }}>
+          <span style={{ fontSize: "20px" }}>💡</span>
+          <div>
+            <p style={{ margin: "0 0 8px 0", fontSize: "14px", fontWeight: "600", color: "#003527" }}>
+              Pro tip: Use English for maximum scholarship opportunities
+            </p>
+            <p style={{ margin: 0, fontSize: "13px", color: "#404944", lineHeight: "1.5" }}>
+              Most international scholarships are offered in English. Writing your essays and providing information in English significantly increases your eligibility and chances of success. International institutions require English proficiency, so submitting in English demonstrates this directly.
+            </p>
+          </div>
+        </div>
+      </div>
+
       <form className="profile-form" onSubmit={saveProfile}>
         <label>
           Applicant country

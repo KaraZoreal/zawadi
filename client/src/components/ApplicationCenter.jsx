@@ -100,6 +100,27 @@ export default function ApplicationCenter({ api, rows = [], user, onToast, onRef
         When something is missing, the application is saved as a draft with specific alerts.
       </p>
 
+      {/* English Language Encouragement Banner */}
+      <div style={{
+        background: "rgba(6, 78, 59, 0.08)",
+        border: "1px solid rgba(6, 78, 59, 0.2)",
+        borderRadius: "8px",
+        padding: "16px",
+        marginBottom: "16px"
+      }}>
+        <div style={{ display: "flex", gap: "12px", alignItems: "flex-start" }}>
+          <span style={{ fontSize: "18px" }}>🌍</span>
+          <div>
+            <p style={{ margin: "0 0 8px 0", fontSize: "14px", fontWeight: "600", color: "#003527" }}>
+              Best practice: Write essays in English
+            </p>
+            <p style={{ margin: 0, fontSize: "13px", color: "#404944", lineHeight: "1.5" }}>
+              Submitting essays in English ensures your writing reaches the broadest audience and meets international scholarship standards. Most scholarship reviewers assess English proficiency directly from your submissions.
+            </p>
+          </div>
+        </div>
+      </div>
+
       {/* Free tier limit banner */}
       {isFree && (
         <div className="free-tier-banner">
